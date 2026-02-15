@@ -1,0 +1,241 @@
+/**
+ * LinkedIn Engagement Highlighter - Styles
+ * Visual highlighting tiers and control panel styling.
+ */
+
+/* ─── Tier Highlights ─────────────────────────────────────────────── */
+
+.leh-tier1 {
+  border: 3px solid #d4a017 !important;
+  box-shadow: 0 0 12px rgba(212, 160, 23, 0.35) !important;
+  border-radius: 8px !important;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.leh-tier2 {
+  border: 2px solid #3b82f6 !important;
+  border-radius: 8px !important;
+  transition: border-color 0.3s ease;
+}
+
+/* ─── Score Badge ─────────────────────────────────────────────────── */
+
+.leh-score-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  padding: 3px 8px;
+  border-radius: 12px;
+  z-index: 10;
+  pointer-events: none;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+}
+
+.leh-tier1 > .leh-score-badge {
+  background: linear-gradient(135deg, #d4a017, #b8860b);
+}
+
+.leh-tier2 > .leh-score-badge {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+}
+
+/* ─── Control Panel ───────────────────────────────────────────────── */
+
+#leh-panel {
+  position: fixed;
+  top: 70px;
+  right: 20px;
+  width: 240px;
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+  z-index: 9999;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  color: #333;
+  user-select: none;
+  overflow: hidden;
+}
+
+#leh-panel.leh-collapsed {
+  width: auto;
+  min-width: 200px;
+}
+
+.leh-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, #0a66c2, #004182);
+  color: #fff;
+  cursor: grab;
+  border-radius: 10px 10px 0 0;
+}
+
+.leh-collapsed .leh-panel-header {
+  border-radius: 10px;
+}
+
+.leh-panel-title {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.leh-panel-toggle-collapse {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: #fff;
+  font-size: 16px;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.leh-panel-toggle-collapse:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.leh-panel-body {
+  padding: 12px;
+}
+
+.leh-control-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.leh-label {
+  font-size: 12px;
+  color: #555;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.leh-label input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.leh-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #888;
+  letter-spacing: 0.06em;
+  margin: 10px 0 6px;
+  border-top: 1px solid #eee;
+  padding-top: 8px;
+}
+
+#leh-panel select {
+  flex: 1;
+  padding: 4px 6px;
+  font-size: 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fafafa;
+  color: #333;
+}
+
+#leh-panel input[type="range"] {
+  flex: 1;
+  cursor: pointer;
+}
+
+#leh-threshold-val {
+  min-width: 36px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0a66c2;
+}
+
+.leh-num-input {
+  width: 60px;
+  padding: 4px 6px;
+  font-size: 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  text-align: center;
+  background: #fafafa;
+}
+
+.leh-num-input:focus {
+  outline: none;
+  border-color: #0a66c2;
+}
+
+.leh-btn {
+  width: 100%;
+  padding: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: #0a66c2;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.leh-btn:hover {
+  background: #004182;
+}
+
+/* ─── Dark Mode Compatibility ─────────────────────────────────────── */
+
+@media (prefers-color-scheme: dark) {
+  #leh-panel {
+    background: #1b1f23;
+    border-color: #333;
+    color: #e0e0e0;
+  }
+
+  .leh-label {
+    color: #aaa;
+  }
+
+  .leh-section-label {
+    color: #777;
+    border-top-color: #333;
+  }
+
+  #leh-panel select,
+  .leh-num-input {
+    background: #2d2d2d;
+    border-color: #444;
+    color: #e0e0e0;
+  }
+
+  .leh-score-badge {
+    background: rgba(30, 30, 30, 0.88);
+  }
+}
+
+/* LinkedIn dark mode class-based detection */
+.theme--dark #leh-panel,
+[data-dark-mode="true"] #leh-panel {
+  background: #1b1f23;
+  border-color: #333;
+  color: #e0e0e0;
+}
