@@ -1,0 +1,437 @@
+/**
+ * LinkedIn Power Tools - Combined Styles
+ * Engagement highlighting + Navigator panel + tabs
+ */
+
+/* ─── Tier Highlights ─────────────────────────────────────────────── */
+
+.lpt-tier1 {
+  border: 3px solid #d4a017 !important;
+  box-shadow: 0 0 12px rgba(212, 160, 23, 0.35) !important;
+  border-radius: 8px !important;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.lpt-tier2 {
+  border: 2px solid #3b82f6 !important;
+  border-radius: 8px !important;
+  transition: border-color 0.3s ease;
+}
+
+/* ─── Score Badge ─────────────────────────────────────────────────── */
+
+.lpt-score-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  padding: 3px 8px;
+  border-radius: 12px;
+  z-index: 10;
+  pointer-events: none;
+  line-height: 1.4;
+}
+
+.lpt-tier1 > .lpt-score-badge {
+  background: linear-gradient(135deg, #d4a017, #b8860b);
+}
+
+.lpt-tier2 > .lpt-score-badge {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+}
+
+/* ─── Panel Container ─────────────────────────────────────────────── */
+
+#lpt-panel {
+  position: fixed;
+  top: 70px;
+  right: 20px;
+  width: 270px;
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+  z-index: 9999;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  color: #333;
+  user-select: none;
+  overflow: hidden;
+}
+
+#lpt-panel.lpt-collapsed {
+  width: auto;
+  min-width: 210px;
+}
+
+/* ─── Header ─────────────────────────────────────────────────────── */
+
+.lpt-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, #0a66c2, #004182);
+  color: #fff;
+  cursor: grab;
+  border-radius: 10px 10px 0 0;
+}
+
+.lpt-collapsed .lpt-panel-header {
+  border-radius: 10px;
+}
+
+.lpt-panel-title {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.lpt-panel-collapse {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: #fff;
+  font-size: 16px;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.lpt-panel-collapse:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* ─── Body ───────────────────────────────────────────────────────── */
+
+.lpt-panel-body {
+  padding: 0;
+}
+
+/* ─── Tab Bar ────────────────────────────────────────────────────── */
+
+.lpt-tab-bar {
+  display: flex;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.lpt-tab {
+  flex: 1;
+  padding: 9px 0;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  transition: color 0.2s, border-bottom 0.2s;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+}
+
+.lpt-tab:hover {
+  color: #0a66c2;
+}
+
+.lpt-tab--active {
+  color: #0a66c2;
+  border-bottom-color: #0a66c2;
+}
+
+/* ─── Tab Content ────────────────────────────────────────────────── */
+
+.lpt-tab-content {
+  display: none;
+  padding: 12px;
+}
+
+.lpt-tab-content--active {
+  display: block;
+}
+
+/* ─── Controls ───────────────────────────────────────────────────── */
+
+.lpt-control-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.lpt-label {
+  font-size: 12px;
+  color: #555;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lpt-label input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.lpt-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #888;
+  letter-spacing: 0.06em;
+  margin: 10px 0 6px;
+  border-top: 1px solid #eee;
+  padding-top: 8px;
+}
+
+#lpt-panel select {
+  flex: 1;
+  padding: 4px 6px;
+  font-size: 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fafafa;
+  color: #333;
+}
+
+#lpt-panel input[type="range"] {
+  flex: 1;
+  cursor: pointer;
+}
+
+#lpt-eng-threshold-val {
+  min-width: 36px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0a66c2;
+}
+
+.lpt-num-input {
+  width: 60px;
+  padding: 4px 6px;
+  font-size: 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  text-align: center;
+  background: #fafafa;
+}
+
+.lpt-num-input:focus {
+  outline: none;
+  border-color: #0a66c2;
+}
+
+/* ─── Buttons ────────────────────────────────────────────────────── */
+
+.lpt-btn {
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: #0a66c2;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s, opacity 0.2s;
+  text-align: center;
+}
+
+.lpt-btn:hover:not(:disabled) {
+  background: #004182;
+}
+
+.lpt-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#lpt-recalculate {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.lpt-button-group {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.lpt-button-group .lpt-btn {
+  flex: 1;
+}
+
+.lpt-btn-custom {
+  background: #555;
+}
+
+.lpt-btn-custom:hover:not(:disabled) {
+  background: #333;
+}
+
+.lpt-btn-stop {
+  background: #dc2626;
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.lpt-btn-stop:hover {
+  background: #b91c1c;
+}
+
+.lpt-btn-go {
+  flex: 0 0 auto;
+  padding: 7px 14px;
+}
+
+/* ─── Custom Date Row ────────────────────────────────────────────── */
+
+.lpt-custom-date-row {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0;
+  align-items: center;
+}
+
+.lpt-date-input {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fafafa;
+  color: #333;
+  font-family: inherit;
+}
+
+.lpt-date-input:focus {
+  outline: none;
+  border-color: #0a66c2;
+}
+
+.lpt-divider {
+  height: 1px;
+  background: #eee;
+  margin: 10px 0;
+}
+
+/* ─── Progress ───────────────────────────────────────────────────── */
+
+.lpt-progress-section {
+  margin-top: 8px;
+}
+
+.lpt-progress-bar-track {
+  width: 100%;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.lpt-progress-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #0a66c2, #16a34a);
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+
+.lpt-progress-text {
+  text-align: center;
+  margin: 6px 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0a66c2;
+}
+
+.lpt-progress-dates {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.lpt-progress-date {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.lpt-date-label {
+  color: #888;
+  font-weight: 600;
+}
+
+#lpt-current-date,
+#lpt-target-date {
+  color: #333;
+  font-weight: 600;
+}
+
+.lpt-scroll-stats {
+  margin-top: 8px;
+  padding: 6px 8px;
+  background: #f3f4f6;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #555;
+  text-align: center;
+}
+
+/* ─── Status ─────────────────────────────────────────────────────── */
+
+.lpt-status {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  min-height: 18px;
+}
+
+.lpt-status:empty { display: none; }
+.lpt-status--success { color: #16a34a; }
+.lpt-status--error { color: #dc2626; }
+.lpt-status--info { color: #0a66c2; }
+
+/* ─── Memory Placeholders ────────────────────────────────────────── */
+
+.lpt-pruned-placeholder {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* ─── Dark Mode ──────────────────────────────────────────────────── */
+
+@media (prefers-color-scheme: dark) {
+  #lpt-panel { background: #1b1f23; border-color: #333; color: #e0e0e0; }
+  .lpt-label { color: #aaa; }
+  .lpt-section-label { color: #777; border-top-color: #333; }
+  .lpt-tab { color: #777; }
+  .lpt-tab--active { color: #5ba3e6; border-bottom-color: #5ba3e6; }
+  .lpt-tab-bar { border-bottom-color: #333; }
+  #lpt-panel select, .lpt-num-input { background: #2d2d2d; border-color: #444; color: #e0e0e0; }
+  .lpt-date-input { background: #2d2d2d; border-color: #444; color: #e0e0e0; }
+  .lpt-divider { background: #333; }
+  .lpt-progress-bar-track { background: #333; }
+  #lpt-current-date, #lpt-target-date { color: #e0e0e0; }
+  .lpt-scroll-stats { background: #2d2d2d; color: #aaa; }
+  .lpt-score-badge { background: rgba(30, 30, 30, 0.88); }
+}
+
+.theme--dark #lpt-panel,
+[data-dark-mode="true"] #lpt-panel {
+  background: #1b1f23;
+  border-color: #333;
+  color: #e0e0e0;
+}
