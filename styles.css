@@ -26,15 +26,31 @@
   right: 8px;
   background: rgba(0, 0, 0, 0.78);
   color: #fff;
-  font-size: 11px;
-  font-weight: 600;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  padding: 3px 8px;
+  padding: 4px 9px;
   border-radius: 12px;
   z-index: 10;
   pointer-events: none;
-  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 60px;
+}
+
+.leh-badge-score {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
   letter-spacing: 0.01em;
+}
+
+.leh-badge-detail {
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.85;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .leh-tier1 > .leh-score-badge {
@@ -51,7 +67,7 @@
   position: fixed;
   top: 70px;
   right: 20px;
-  width: 240px;
+  width: 250px;
   background: #ffffff;
   border: 1px solid #e0e0e0;
   border-radius: 10px;
@@ -141,9 +157,22 @@
   text-transform: uppercase;
   color: #888;
   letter-spacing: 0.06em;
-  margin: 10px 0 6px;
+  margin: 10px 0 4px;
   border-top: 1px solid #eee;
   padding-top: 8px;
+}
+
+.leh-weight-help {
+  font-size: 10px;
+  color: #aaa;
+  margin-bottom: 6px;
+}
+
+.leh-scroll-note {
+  font-size: 10px;
+  color: #aaa;
+  margin-top: 4px;
+  line-height: 1.4;
 }
 
 #leh-panel select {
@@ -161,8 +190,9 @@
   cursor: pointer;
 }
 
-#leh-threshold-val {
-  min-width: 36px;
+#leh-threshold-val,
+#leh-scroll-speed-val {
+  min-width: 20px;
   text-align: right;
   font-size: 12px;
   font-weight: 600;
@@ -170,7 +200,7 @@
 }
 
 .leh-num-input {
-  width: 60px;
+  width: 52px;
   padding: 4px 6px;
   font-size: 12px;
   border: 1px solid #ddd;
@@ -218,6 +248,11 @@
   .leh-section-label {
     color: #777;
     border-top-color: #333;
+  }
+
+  .leh-weight-help,
+  .leh-scroll-note {
+    color: #666;
   }
 
   #leh-panel select,
