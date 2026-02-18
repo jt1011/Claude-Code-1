@@ -189,6 +189,171 @@
     return { likes, comments, reposts };
   }
 
+  // ─── Post Metadata Extraction ────────────────────────────────────────
+
+  /**
+   * Extracts the LinkedIn permalink for a post from its data-urn attribute.
+   * Format: https://www.linkedin.com/feed/update/{urn}
+   */
+  function extractPostUrl(postEl) {
+    // Try data-urn on the element itself
+    let urn = postEl.getAttribute("data-urn");
+
+    // Try parent or child with data-urn
+    if (!urn) {
+      const parent = postEl.closest("[data-urn]");
+      if (parent) urn = parent.getAttribute("data-urn");
+    }
+    if (!urn) {
+      const child = postEl.querySelector("[data-urn]");
+      if (child) urn = child.getAttribute("data-urn");
+    }
+
+    // Try data-id as fallback
+    if (!urn) {
+      const dataIdEl = postEl.closest("[data-id]") || postEl.querySelector("[data-id]");
+      if (dataIdEl) urn = dataIdEl.getAttribute("data-id");
+    }
+
+    if (urn) {
+      return "https://www.linkedin.com/feed/update/" + urn;
+    }
+
+    return "";
+  }
+
+  /**
+   * Extracts the author/actor name from a post element.
+   */
+  function extractAuthorName(postEl) {
+    const selectors = [
+      ".feed-shared-actor__name",
+      ".update-components-actor__name",
+      ".feed-shared-actor__title",
+      ".update-components-actor__title",
+    ];
+
+    for (const sel of selectors) {
+      const el = postEl.querySelector(sel);
+      if (el) {
+        // Get visible text only (skip screen-reader-only spans)
+        const visually = el.querySelector(".visually-hidden");
+        if (visually) {
+          const clone = el.cloneNode(true);
+          const hidden = clone.querySelector(".visually-hidden");
+          if (hidden) hidden.remove();
+          const name = clone.textContent.trim();
+          if (name) return name;
+        }
+        const name = el.textContent.trim();
+        if (name) return name;
+      }
+    }
+
+    return "";
+  }
+
+  // ─── CSV Export ─────────────────────────────────────────────────────
+
+  /**
+   * Collects data from all currently visible scored posts and triggers
+   * a CSV download. User-initiated, on-demand — no background collection.
+   */
+  function exportTopPosts(tierFilter) {
+    const posts = findPostContainers();
+    const rows = [];
+
+    for (const postEl of posts) {
+      const engagement = extractEngagement(postEl);
+      const score = calculateScore(engagement);
+      if (score === 0) continue;
+
+      // Determine tier
+      let tier = "—";
+      if (postEl.classList.contains("leh-tier1")) tier = "Tier 1 (Gold)";
+      else if (postEl.classList.contains("leh-tier2")) tier = "Tier 2 (Blue)";
+
+      // Apply filter: "all" = all scored, "highlighted" = tier 1 & 2 only
+      if (tierFilter === "highlighted" && tier === "—") continue;
+
+      rows.push({
+        author: extractAuthorName(postEl),
+        url: extractPostUrl(postEl),
+        score,
+        likes: engagement.likes,
+        comments: engagement.comments,
+        reposts: engagement.reposts,
+        tier,
+      });
+    }
+
+    if (rows.length === 0) {
+      showExportFeedback("No posts to export. Scroll to load some posts first.", "warn");
+      return;
+    }
+
+    // Sort by score descending
+    rows.sort((a, b) => b.score - a.score);
+
+    // Build CSV
+    const header = ["Author", "Post URL", "Score", "Likes", "Comments", "Reposts", "Tier"];
+    const csvLines = [header.join(",")];
+
+    for (const r of rows) {
+      csvLines.push([
+        csvEscape(r.author),
+        csvEscape(r.url),
+        r.score,
+        r.likes,
+        r.comments,
+        r.reposts,
+        csvEscape(r.tier),
+      ].join(","));
+    }
+
+    const csvContent = csvLines.join("\n");
+    downloadCSV(csvContent, "linkedin-top-posts.csv");
+    showExportFeedback(`Exported ${rows.length} post${rows.length !== 1 ? "s" : ""}.`, "success");
+  }
+
+  function csvEscape(value) {
+    const str = String(value);
+    if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+      return '"' + str.replace(/"/g, '""') + '"';
+    }
+    return str;
+  }
+
+  function downloadCSV(content, filename) {
+    const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  function showExportFeedback(message, type) {
+    const existing = document.getElementById("leh-export-feedback");
+    if (existing) existing.remove();
+
+    const el = document.createElement("div");
+    el.id = "leh-export-feedback";
+    el.className = "leh-export-feedback leh-export-feedback--" + type;
+    el.textContent = message;
+
+    const panel = document.getElementById("leh-panel");
+    const body = panel?.querySelector(".leh-panel-body");
+    if (body) {
+      body.appendChild(el);
+      setTimeout(() => el.remove(), 3500);
+    }
+  }
+
   // ─── Scoring ─────────────────────────────────────────────────────────
 
   /**
@@ -501,6 +666,20 @@
         <div class="leh-scroll-note">
           Auto-scroll pauses when LinkedIn shows a "Show more" prompt, clicks it, then resumes.
         </div>
+
+        <!-- Export section -->
+        <div class="leh-section-label">Export</div>
+        <div class="leh-export-note">
+          Download a CSV of posts currently visible on the page.
+        </div>
+        <div class="leh-control-row">
+          <label class="leh-label">Include:</label>
+          <select id="leh-export-filter">
+            <option value="highlighted">Highlighted only</option>
+            <option value="all">All scored posts</option>
+          </select>
+        </div>
+        <button id="leh-export" class="leh-btn leh-btn-export">Export Top Posts</button>
       </div>
     `;
 
@@ -607,6 +786,12 @@
       autoScrollSpeed = parseInt(e.target.value, 10);
       document.getElementById("leh-scroll-speed-val").textContent = autoScrollSpeed;
       saveSettings();
+    });
+
+    // ── Export controls ──
+    document.getElementById("leh-export").addEventListener("click", () => {
+      const filter = document.getElementById("leh-export-filter").value;
+      exportTopPosts(filter);
     });
   }
 
