@@ -14,11 +14,20 @@
   let showScores = true;
   let mode = "percentile"; // "percentile" or "threshold"
   let absoluteThreshold = 100;
-  let weights = { reactions: 1, comments: 3, reposts: 4 };
+  // Likes and comments are primary signals; reposts are secondary
+  let weights = { likes: 5, comments: 10, reposts: 2 };
   let processedPosts = new WeakSet();
   let debounceTimer = null;
 
   const DEBOUNCE_MS = 300;
+
+  // ─── Auto-scroll state ───────────────────────────────────────────────
+  let autoScrollEnabled = false;
+  let autoScrollInterval = null;
+  let showMoreCheckInterval = null;
+  let autoScrollSpeed = 2;   // px per tick
+  let autoScrollTick = 80;   // ms between ticks (varied for natural feel)
+  let showMoreHandled = false;
 
   // ─── Number Parsing ──────────────────────────────────────────────────
 
@@ -71,7 +80,7 @@
    * Only reads visible text content from the DOM.
    */
   function extractEngagement(postEl) {
-    let reactions = 0;
+    let likes = 0;
     let comments = 0;
     let reposts = 0;
 
@@ -80,7 +89,7 @@
       ".social-details-social-counts"
     );
     if (socialCounts) {
-      // Reactions - typically in a button or span with reaction count
+      // Likes/Reactions - typically in a button or span with reaction count
       const reactionEl =
         socialCounts.querySelector(
           '.social-details-social-counts__reactions-count'
@@ -92,7 +101,7 @@
           'button[aria-label*="reaction"] span'
         );
       if (reactionEl) {
-        reactions = parseCount(reactionEl.textContent);
+        likes = parseCount(reactionEl.textContent);
       }
 
       // Comments count
@@ -106,7 +115,6 @@
           comments = parseCount(numMatch[1]);
           break;
         }
-        // Fallback: just parse any number found
         const fallbackMatch = label.match(/([\d,.]+[KMB]?)/);
         if (fallbackMatch && label.toLowerCase().includes("comment")) {
           comments = parseCount(fallbackMatch[1]);
@@ -134,7 +142,7 @@
     }
 
     // Strategy 2: Fallback - scan aria-labels on all buttons inside the post
-    if (reactions === 0 && comments === 0 && reposts === 0) {
+    if (likes === 0 && comments === 0 && reposts === 0) {
       const buttons = postEl.querySelectorAll("button[aria-label]");
       for (const btn of buttons) {
         const label = btn.getAttribute("aria-label") || "";
@@ -142,7 +150,7 @@
 
         if (lowerLabel.includes("reaction") || lowerLabel.includes("like")) {
           const m = label.match(/([\d,.]+[KMB]?)/);
-          if (m) reactions = Math.max(reactions, parseCount(m[1]));
+          if (m) likes = Math.max(likes, parseCount(m[1]));
         }
         if (lowerLabel.includes("comment")) {
           const m = label.match(/([\d,.]+[KMB]?)/);
@@ -156,13 +164,12 @@
     }
 
     // Strategy 3: Look for visible count text near action buttons
-    if (reactions === 0 && comments === 0 && reposts === 0) {
+    if (likes === 0 && comments === 0 && reposts === 0) {
       const spans = postEl.querySelectorAll("span.social-details-social-counts__reactions-count");
       for (const span of spans) {
-        reactions = parseCount(span.textContent);
+        likes = parseCount(span.textContent);
       }
 
-      // Generic search for comment/repost counts in text
       const allSpans = postEl.querySelectorAll(
         '.social-details-social-counts span'
       );
@@ -179,14 +186,21 @@
       }
     }
 
-    return { reactions, comments, reposts };
+    return { likes, comments, reposts };
   }
 
   // ─── Scoring ─────────────────────────────────────────────────────────
 
+  /**
+   * Simple weighted score: likes and comments are primary,
+   * reposts are secondary. Higher comment weight reflects
+   * that commenting takes more intent than a like.
+   *
+   * Score = (likes × wL) + (comments × wC) + (reposts × wR)
+   */
   function calculateScore(engagement) {
     return (
-      engagement.reactions * weights.reactions +
+      engagement.likes * weights.likes +
       engagement.comments * weights.comments +
       engagement.reposts * weights.reposts
     );
@@ -209,38 +223,41 @@
     if (scoredPosts.length === 0) return;
 
     if (mode === "percentile") {
-      // Sort by score descending
       const sorted = [...scoredPosts].sort((a, b) => b.score - a.score);
       const top10Index = Math.max(1, Math.ceil(sorted.length * 0.1));
       const medianIndex = Math.floor(sorted.length / 2);
       const top10Threshold = sorted[top10Index - 1]?.score ?? Infinity;
       const medianThreshold = sorted[medianIndex]?.score ?? 0;
 
-      for (const { element, score } of scoredPosts) {
+      for (const { element, score, engagement } of scoredPosts) {
         element.classList.remove("leh-tier1", "leh-tier2");
         if (score >= top10Threshold && score > 0) {
           element.classList.add("leh-tier1");
         } else if (score >= medianThreshold && score > 0) {
           element.classList.add("leh-tier2");
         }
-        if (showScores) addScoreBadge(element, score);
+        if (showScores) addScoreBadge(element, score, engagement);
       }
     } else {
-      // Absolute threshold mode
-      for (const { element, score } of scoredPosts) {
+      for (const { element, score, engagement } of scoredPosts) {
         element.classList.remove("leh-tier1", "leh-tier2");
         if (score >= absoluteThreshold * 2) {
           element.classList.add("leh-tier1");
         } else if (score >= absoluteThreshold) {
           element.classList.add("leh-tier2");
         }
-        if (showScores) addScoreBadge(element, score);
+        if (showScores) addScoreBadge(element, score, engagement);
       }
     }
   }
 
-  function addScoreBadge(element, score) {
-    // Remove existing badge
+  function formatCount(n) {
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
+    if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
+    return String(n);
+  }
+
+  function addScoreBadge(element, score, engagement) {
     const existing = element.querySelector(".leh-score-badge");
     if (existing) existing.remove();
 
@@ -248,9 +265,16 @@
 
     const badge = document.createElement("div");
     badge.className = "leh-score-badge";
-    badge.textContent = `Score: ${score.toLocaleString()}`;
 
-    // Ensure the post is positioned for absolute placement
+    // Human-readable breakdown: likes · comments · reposts
+    const parts = [];
+    if (engagement.likes > 0) parts.push(`\u2764\ufe0f ${formatCount(engagement.likes)}`);
+    if (engagement.comments > 0) parts.push(`\ud83d\udcac ${formatCount(engagement.comments)}`);
+    if (engagement.reposts > 0) parts.push(`\ud83d\udd01 ${formatCount(engagement.reposts)}`);
+
+    const breakdown = parts.length > 0 ? parts.join("  ") : "no data";
+    badge.innerHTML = `<span class="leh-badge-score">${score.toLocaleString()}</span><span class="leh-badge-detail">${breakdown}</span>`;
+
     const computedStyle = window.getComputedStyle(element);
     if (computedStyle.position === "static") {
       element.style.position = "relative";
@@ -273,8 +297,6 @@
     for (const postEl of posts) {
       const engagement = extractEngagement(postEl);
       const score = calculateScore(engagement);
-
-      // Skip posts with zero engagement (might be sponsored or newly loaded)
       scoredPosts.push({ element: postEl, score, engagement });
     }
 
@@ -316,10 +338,100 @@
     return observer;
   }
 
+  // ─── Auto-scroll ─────────────────────────────────────────────────────
+
+  /**
+   * Look for LinkedIn's "Show more activity" / "Show more results" button
+   * and click it after a polite delay so LinkedIn can load naturally.
+   * No CSS hacks — just clicks the button LinkedIn already shows.
+   */
+  function findShowMoreButton() {
+    // Common selectors for LinkedIn's load-more buttons
+    const candidates = Array.from(document.querySelectorAll("button, a[role='button']"));
+    for (const el of candidates) {
+      const text = (el.textContent || "").trim().toLowerCase();
+      if (
+        text.includes("show more") ||
+        text.includes("load more") ||
+        text.includes("see more activity") ||
+        text.includes("show more results")
+      ) {
+        return el;
+      }
+    }
+    return null;
+  }
+
+  function handleShowMore() {
+    const btn = findShowMoreButton();
+    if (btn && !showMoreHandled) {
+      showMoreHandled = true;
+      // Scroll up just enough so the button is in view, then pause
+      btn.scrollIntoView({ behavior: "smooth", block: "center" });
+
+      setTimeout(() => {
+        // Only click if auto-scroll is still enabled
+        if (!autoScrollEnabled) return;
+        btn.click();
+        showMoreHandled = false; // allow detecting the next one
+        // Wait for content to render before resuming scroll
+        setTimeout(() => {
+          showMoreHandled = false;
+        }, 2000);
+      }, 1200);
+    }
+  }
+
+  function startAutoScroll() {
+    if (autoScrollInterval) return;
+    showMoreHandled = false;
+
+    let tick = 0;
+    autoScrollInterval = setInterval(() => {
+      if (!autoScrollEnabled) {
+        stopAutoScroll();
+        return;
+      }
+
+      // Natural variation in scroll speed (±1px, change every ~20 ticks)
+      const variance = tick % 23 < 12 ? autoScrollSpeed : autoScrollSpeed + 1;
+      window.scrollBy({ top: variance, behavior: "instant" });
+      tick++;
+
+      // Check if we've hit the bottom
+      const atBottom =
+        window.innerHeight + window.scrollY >= document.body.scrollHeight - 100;
+
+      if (atBottom) {
+        // Pause and look for a "show more" button
+        handleShowMore();
+      }
+    }, autoScrollTick);
+
+    // Separately poll for show-more buttons (catches mid-feed prompts too)
+    showMoreCheckInterval = setInterval(() => {
+      if (!autoScrollEnabled) return;
+      const btn = findShowMoreButton();
+      if (btn && !showMoreHandled) {
+        handleShowMore();
+      }
+    }, 3000);
+  }
+
+  function stopAutoScroll() {
+    if (autoScrollInterval) {
+      clearInterval(autoScrollInterval);
+      autoScrollInterval = null;
+    }
+    if (showMoreCheckInterval) {
+      clearInterval(showMoreCheckInterval);
+      showMoreCheckInterval = null;
+    }
+  }
+
   // ─── Control Panel ───────────────────────────────────────────────────
 
   function createControlPanel() {
-    // Prevent duplicate panels
     if (document.getElementById("leh-panel")) return;
 
     const panel = document.createElement("div");
@@ -330,23 +442,25 @@
         <button class="leh-panel-toggle-collapse" title="Minimize">&#x2212;</button>
       </div>
       <div class="leh-panel-body">
+
+        <!-- Highlighter section -->
         <div class="leh-control-row">
           <label class="leh-label">
             <input type="checkbox" id="leh-enabled" checked />
-            Enabled
+            Highlight posts
           </label>
         </div>
         <div class="leh-control-row">
           <label class="leh-label">
             <input type="checkbox" id="leh-show-scores" checked />
-            Show Scores
+            Show score badge
           </label>
         </div>
         <div class="leh-control-row">
           <label class="leh-label">Mode:</label>
           <select id="leh-mode">
-            <option value="percentile">Percentile</option>
-            <option value="threshold">Threshold</option>
+            <option value="percentile">Percentile (auto)</option>
+            <option value="threshold">Fixed threshold</option>
           </select>
         </div>
         <div class="leh-control-row leh-threshold-row" style="display:none;">
@@ -354,26 +468,45 @@
           <input type="range" id="leh-threshold" min="10" max="5000" value="100" step="10" />
           <span id="leh-threshold-val">100</span>
         </div>
-        <div class="leh-section-label">Weights</div>
+
+        <div class="leh-section-label">Score weights</div>
+        <div class="leh-weight-help">Higher = counts more toward score</div>
         <div class="leh-control-row">
-          <label class="leh-label">Reactions:</label>
-          <input type="number" id="leh-w-reactions" value="1" min="0" max="20" step="0.5" class="leh-num-input" />
+          <label class="leh-label">\u2764\ufe0f Likes</label>
+          <input type="number" id="leh-w-likes" value="5" min="0" max="20" step="1" class="leh-num-input" />
         </div>
         <div class="leh-control-row">
-          <label class="leh-label">Comments:</label>
-          <input type="number" id="leh-w-comments" value="3" min="0" max="20" step="0.5" class="leh-num-input" />
+          <label class="leh-label">\ud83d\udcac Comments</label>
+          <input type="number" id="leh-w-comments" value="10" min="0" max="20" step="1" class="leh-num-input" />
         </div>
         <div class="leh-control-row">
-          <label class="leh-label">Reposts:</label>
-          <input type="number" id="leh-w-reposts" value="4" min="0" max="20" step="0.5" class="leh-num-input" />
+          <label class="leh-label">\ud83d\udd01 Reposts</label>
+          <input type="number" id="leh-w-reposts" value="2" min="0" max="20" step="1" class="leh-num-input" />
         </div>
         <button id="leh-recalculate" class="leh-btn">Recalculate</button>
+
+        <!-- Auto-scroll section -->
+        <div class="leh-section-label">Auto-scroll</div>
+        <div class="leh-control-row">
+          <label class="leh-label">
+            <input type="checkbox" id="leh-autoscroll" />
+            Scroll feed automatically
+          </label>
+        </div>
+        <div class="leh-control-row">
+          <label class="leh-label">Speed:</label>
+          <input type="range" id="leh-scroll-speed" min="1" max="6" value="2" step="1" />
+          <span id="leh-scroll-speed-val">2</span>
+        </div>
+        <div class="leh-scroll-note">
+          Auto-scroll pauses when LinkedIn shows a "Show more" prompt, clicks it, then resumes.
+        </div>
       </div>
     `;
 
     document.body.appendChild(panel);
 
-    // ── Panel collapse toggle ──
+    // ── Collapse toggle ──
     let collapsed = false;
     const collapseBtn = panel.querySelector(".leh-panel-toggle-collapse");
     const panelBody = panel.querySelector(".leh-panel-body");
@@ -409,7 +542,7 @@
       isDragging = false;
     });
 
-    // ── Event listeners ──
+    // ── Highlighter controls ──
     document.getElementById("leh-enabled").addEventListener("change", (e) => {
       enabled = e.target.checked;
       processAllPosts();
@@ -440,8 +573,8 @@
       processAllPosts();
     });
 
-    document.getElementById("leh-w-reactions").addEventListener("change", (e) => {
-      weights.reactions = parseFloat(e.target.value) || 0;
+    document.getElementById("leh-w-likes").addEventListener("change", (e) => {
+      weights.likes = parseFloat(e.target.value) || 0;
       saveSettings();
     });
 
@@ -458,6 +591,23 @@
     document.getElementById("leh-recalculate").addEventListener("click", () => {
       processAllPosts();
     });
+
+    // ── Auto-scroll controls ──
+    document.getElementById("leh-autoscroll").addEventListener("change", (e) => {
+      autoScrollEnabled = e.target.checked;
+      if (autoScrollEnabled) {
+        startAutoScroll();
+      } else {
+        stopAutoScroll();
+      }
+      saveSettings();
+    });
+
+    document.getElementById("leh-scroll-speed").addEventListener("input", (e) => {
+      autoScrollSpeed = parseInt(e.target.value, 10);
+      document.getElementById("leh-scroll-speed-val").textContent = autoScrollSpeed;
+      saveSettings();
+    });
   }
 
   // ─── Settings Persistence (local only) ───────────────────────────────
@@ -471,6 +621,8 @@
           mode,
           absoluteThreshold,
           weights,
+          autoScrollEnabled,
+          autoScrollSpeed,
         },
       });
     } catch {
@@ -487,30 +639,35 @@
           showScores = s.showScores ?? true;
           mode = s.mode ?? "percentile";
           absoluteThreshold = s.absoluteThreshold ?? 100;
-          weights = s.weights ?? { reactions: 1, comments: 3, reposts: 4 };
+          weights = s.weights ?? { likes: 5, comments: 10, reposts: 2 };
+          autoScrollSpeed = s.autoScrollSpeed ?? 2;
+          // Don't restore autoScrollEnabled — always start with it off
 
-          // Update UI to match loaded settings
           const enabledEl = document.getElementById("leh-enabled");
           const showScoresEl = document.getElementById("leh-show-scores");
           const modeEl = document.getElementById("leh-mode");
           const thresholdEl = document.getElementById("leh-threshold");
           const thresholdValEl = document.getElementById("leh-threshold-val");
-          const wReactionsEl = document.getElementById("leh-w-reactions");
+          const wLikesEl = document.getElementById("leh-w-likes");
           const wCommentsEl = document.getElementById("leh-w-comments");
           const wRepostsEl = document.getElementById("leh-w-reposts");
           const thresholdRow = document.querySelector(".leh-threshold-row");
+          const scrollSpeedEl = document.getElementById("leh-scroll-speed");
+          const scrollSpeedValEl = document.getElementById("leh-scroll-speed-val");
 
           if (enabledEl) enabledEl.checked = enabled;
           if (showScoresEl) showScoresEl.checked = showScores;
           if (modeEl) modeEl.value = mode;
           if (thresholdEl) thresholdEl.value = absoluteThreshold;
           if (thresholdValEl) thresholdValEl.textContent = absoluteThreshold;
-          if (wReactionsEl) wReactionsEl.value = weights.reactions;
+          if (wLikesEl) wLikesEl.value = weights.likes;
           if (wCommentsEl) wCommentsEl.value = weights.comments;
           if (wRepostsEl) wRepostsEl.value = weights.reposts;
           if (thresholdRow) {
             thresholdRow.style.display = mode === "threshold" ? "flex" : "none";
           }
+          if (scrollSpeedEl) scrollSpeedEl.value = autoScrollSpeed;
+          if (scrollSpeedValEl) scrollSpeedValEl.textContent = autoScrollSpeed;
 
           processAllPosts();
         }
@@ -527,10 +684,8 @@
     loadSettings();
     setupObserver();
 
-    // Initial processing after a short delay to let the feed render
     setTimeout(processAllPosts, 1000);
 
-    // Also reprocess on scroll (debounced) to catch lazy-loaded content
     let scrollTimer = null;
     window.addEventListener(
       "scroll",
@@ -542,7 +697,6 @@
     );
   }
 
-  // Wait for the page to be ready
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
   } else {
