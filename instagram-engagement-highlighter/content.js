@@ -234,6 +234,89 @@
     return { likes, comments, views };
   }
 
+  // ─── Post Metadata Extraction ────────────────────────────────────────
+
+  /**
+   * Extracts metadata from a post element: username, post URL, caption snippet.
+   * Only reads visible DOM content — no network requests.
+   */
+  function extractPostMeta(postEl) {
+    let username = "";
+    let postUrl = "";
+    let caption = "";
+
+    // ── Username ──
+    // Instagram post headers contain an anchor with href like "/username/"
+    // Usually the first link in the post header area
+    const headerLinks = postEl.querySelectorAll('header a[href], a[role="link"]');
+    for (const link of headerLinks) {
+      const href = link.getAttribute("href") || "";
+      // Match /<username>/ pattern (not /p/, /reel/, /explore/, etc.)
+      const userMatch = href.match(/^\/([A-Za-z0-9_.]+)\/?$/);
+      if (userMatch) {
+        username = userMatch[1];
+        break;
+      }
+    }
+
+    // Fallback: look for any link that looks like a profile link
+    if (!username) {
+      const allLinks = postEl.querySelectorAll('a[href]');
+      for (const link of allLinks) {
+        const href = link.getAttribute("href") || "";
+        const userMatch = href.match(/^\/([A-Za-z0-9_.]+)\/?$/);
+        if (userMatch && !["p", "reel", "explore", "stories", "accounts", "directory"].includes(userMatch[1])) {
+          username = userMatch[1];
+          break;
+        }
+      }
+    }
+
+    // ── Post URL ──
+    // Instagram post links contain /p/<shortcode>/ or /reel/<shortcode>/
+    const postLinks = postEl.querySelectorAll('a[href*="/p/"], a[href*="/reel/"]');
+    for (const link of postLinks) {
+      const href = link.getAttribute("href") || "";
+      if (href.includes("/p/") || href.includes("/reel/")) {
+        postUrl = href.startsWith("http") ? href : "https://www.instagram.com" + href;
+        break;
+      }
+    }
+
+    // Fallback: look at time element's parent link (Instagram wraps timestamps in post links)
+    if (!postUrl) {
+      const timeEl = postEl.querySelector("time");
+      if (timeEl) {
+        const parentLink = timeEl.closest("a[href]");
+        if (parentLink) {
+          const href = parentLink.getAttribute("href") || "";
+          postUrl = href.startsWith("http") ? href : "https://www.instagram.com" + href;
+        }
+      }
+    }
+
+    // ── Caption ──
+    // Captions are typically in a span inside the area below the image,
+    // often following the username link
+    const captionCandidates = postEl.querySelectorAll('span, div');
+    for (const el of captionCandidates) {
+      const text = (el.textContent || "").trim();
+      // Skip very short strings, engagement text, timestamps
+      if (text.length < 20) continue;
+      if (/^\d+\s*(likes?|comments?|views?|plays?)/i.test(text)) continue;
+      if (/^(View all|Liked by|Load more)/i.test(text)) continue;
+      if (el.closest("header")) continue;
+      // Skip if this element has many child elements (it's a container)
+      if (el.children.length > 3) continue;
+
+      // Take first substantial text block as caption
+      caption = text.length > 150 ? text.substring(0, 147) + "..." : text;
+      break;
+    }
+
+    return { username, postUrl, caption };
+  }
+
   // ─── Scoring ─────────────────────────────────────────────────────────
 
   /**
@@ -479,6 +562,21 @@
         <div class="ieh-scroll-note">
           Auto-scroll smoothly scrolls through your Instagram feed so the highlighter can score posts as they load.
         </div>
+
+        <!-- Extract top posts section -->
+        <div class="ieh-section-label">Extract top posts</div>
+        <div class="ieh-control-row">
+          <label class="ieh-label">Show top:</label>
+          <select id="ieh-export-count">
+            <option value="5">5 posts</option>
+            <option value="10" selected>10 posts</option>
+            <option value="25">25 posts</option>
+            <option value="50">50 posts</option>
+            <option value="all">All scored</option>
+          </select>
+        </div>
+        <button id="ieh-extract" class="ieh-btn ieh-btn-extract">Extract Top Posts</button>
+        <div id="ieh-extract-count" class="ieh-scroll-note"></div>
       </div>
     `;
 
@@ -586,6 +684,206 @@
       document.getElementById("ieh-scroll-speed-val").textContent = autoScrollSpeed;
       saveSettings();
     });
+
+    // ── Extract top posts ──
+    document.getElementById("ieh-extract").addEventListener("click", () => {
+      extractTopPosts();
+    });
+
+    // Update the "X posts in feed" counter on scroll
+    updateExtractCount();
+  }
+
+  // ─── Extract Top Posts ────────────────────────────────────────────────
+
+  function updateExtractCount() {
+    const countEl = document.getElementById("ieh-extract-count");
+    if (!countEl) return;
+    const posts = findPostContainers();
+    countEl.textContent = posts.length + " post" + (posts.length !== 1 ? "s" : "") + " detected in feed";
+  }
+
+  function extractTopPosts() {
+    const posts = findPostContainers();
+    const scored = [];
+
+    for (const postEl of posts) {
+      const engagement = extractEngagement(postEl);
+      const score = calculateScore(engagement);
+      const meta = extractPostMeta(postEl);
+      scored.push({ ...meta, ...engagement, score });
+    }
+
+    // Sort by score descending
+    scored.sort((a, b) => b.score - a.score);
+
+    // Filter by selection
+    const countSel = document.getElementById("ieh-export-count");
+    const countVal = countSel ? countSel.value : "10";
+    const limit = countVal === "all" ? scored.length : parseInt(countVal, 10);
+    const topPosts = scored.slice(0, limit);
+
+    // Update detected count
+    updateExtractCount();
+
+    // Show results modal
+    showExportModal(topPosts);
+  }
+
+  function showExportModal(posts) {
+    // Remove existing modal if any
+    const existing = document.getElementById("ieh-export-modal");
+    if (existing) existing.remove();
+
+    const overlay = document.createElement("div");
+    overlay.id = "ieh-export-modal";
+    overlay.className = "ieh-modal-overlay";
+
+    const totalPosts = findPostContainers().length;
+
+    let tableRows = "";
+    posts.forEach((p, i) => {
+      const user = p.username ? `@${p.username}` : "unknown";
+      const link = p.postUrl
+        ? `<a href="${p.postUrl}" target="_blank" rel="noopener noreferrer" class="ieh-modal-link">${p.postUrl.length > 40 ? p.postUrl.substring(0, 37) + "..." : p.postUrl}</a>`
+        : "N/A";
+      const cap = p.caption
+        ? `<span class="ieh-modal-caption">${p.caption.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</span>`
+        : "";
+      tableRows += `
+        <tr>
+          <td class="ieh-modal-rank">${i + 1}</td>
+          <td class="ieh-modal-user">${user}</td>
+          <td class="ieh-modal-metrics">${formatCount(p.likes)}</td>
+          <td class="ieh-modal-metrics">${formatCount(p.comments)}</td>
+          <td class="ieh-modal-metrics">${formatCount(p.views)}</td>
+          <td class="ieh-modal-score">${p.score.toLocaleString()}</td>
+          <td class="ieh-modal-link-cell">${link}</td>
+        </tr>
+        ${cap ? `<tr class="ieh-caption-row"><td></td><td colspan="6">${cap}</td></tr>` : ""}
+      `;
+    });
+
+    overlay.innerHTML = `
+      <div class="ieh-modal">
+        <div class="ieh-modal-header">
+          <span class="ieh-modal-title">Top ${posts.length} Posts (of ${totalPosts} detected)</span>
+          <button class="ieh-modal-close" title="Close">&times;</button>
+        </div>
+        <div class="ieh-modal-actions">
+          <button id="ieh-copy-text" class="ieh-btn ieh-btn-sm">Copy as Text</button>
+          <button id="ieh-copy-json" class="ieh-btn ieh-btn-sm">Copy JSON</button>
+          <button id="ieh-download-csv" class="ieh-btn ieh-btn-sm">Download CSV</button>
+        </div>
+        <div class="ieh-modal-body">
+          <table class="ieh-modal-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>User</th>
+                <th>Likes</th>
+                <th>Comments</th>
+                <th>Views</th>
+                <th>Score</th>
+                <th>Link</th>
+              </tr>
+            </thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+          ${posts.length === 0 ? '<div class="ieh-modal-empty">No posts found. Try scrolling through the feed first to load posts.</div>' : ""}
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    // ── Close ──
+    overlay.querySelector(".ieh-modal-close").addEventListener("click", () => {
+      overlay.remove();
+    });
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
+
+    // ── Copy as Text ──
+    document.getElementById("ieh-copy-text").addEventListener("click", () => {
+      const lines = posts.map((p, i) => {
+        const user = p.username ? `@${p.username}` : "unknown";
+        const parts = [];
+        if (p.likes > 0) parts.push(`${formatCount(p.likes)} likes`);
+        if (p.comments > 0) parts.push(`${formatCount(p.comments)} comments`);
+        if (p.views > 0) parts.push(`${formatCount(p.views)} views`);
+        let line = `${i + 1}. ${user} — Score: ${p.score.toLocaleString()} (${parts.join(", ")})`;
+        if (p.postUrl) line += `\n   ${p.postUrl}`;
+        if (p.caption) line += `\n   "${p.caption}"`;
+        return line;
+      });
+      const text = `Instagram Top ${posts.length} Posts\n${"=".repeat(40)}\n\n${lines.join("\n\n")}`;
+      navigator.clipboard.writeText(text).then(() => {
+        flashButton("ieh-copy-text", "Copied!");
+      });
+    });
+
+    // ── Copy JSON ──
+    document.getElementById("ieh-copy-json").addEventListener("click", () => {
+      const data = posts.map((p, i) => ({
+        rank: i + 1,
+        username: p.username || null,
+        postUrl: p.postUrl || null,
+        caption: p.caption || null,
+        likes: p.likes,
+        comments: p.comments,
+        views: p.views,
+        score: p.score,
+      }));
+      navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(() => {
+        flashButton("ieh-copy-json", "Copied!");
+      });
+    });
+
+    // ── Download CSV ──
+    document.getElementById("ieh-download-csv").addEventListener("click", () => {
+      const header = "Rank,Username,Likes,Comments,Views,Score,Post URL,Caption";
+      const rows = posts.map((p, i) => {
+        const escapeCsv = (val) => {
+          const s = String(val ?? "");
+          return s.includes(",") || s.includes('"') || s.includes("\n")
+            ? '"' + s.replace(/"/g, '""') + '"'
+            : s;
+        };
+        return [
+          i + 1,
+          escapeCsv(p.username || ""),
+          p.likes,
+          p.comments,
+          p.views,
+          p.score,
+          escapeCsv(p.postUrl || ""),
+          escapeCsv(p.caption || ""),
+        ].join(",");
+      });
+      const csv = header + "\n" + rows.join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `instagram-top-posts-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      flashButton("ieh-download-csv", "Downloaded!");
+    });
+  }
+
+  function flashButton(id, text) {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    const original = btn.textContent;
+    btn.textContent = text;
+    btn.classList.add("ieh-btn-flash");
+    setTimeout(() => {
+      btn.textContent = original;
+      btn.classList.remove("ieh-btn-flash");
+    }, 1500);
   }
 
   // ─── Settings Persistence (local only) ───────────────────────────────
@@ -669,7 +967,10 @@
       "scroll",
       () => {
         clearTimeout(scrollTimer);
-        scrollTimer = setTimeout(processAllPosts, 500);
+        scrollTimer = setTimeout(() => {
+          processAllPosts();
+          updateExtractCount();
+        }, 500);
       },
       { passive: true }
     );
