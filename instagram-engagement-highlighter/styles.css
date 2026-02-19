@@ -62,6 +62,41 @@
   background: linear-gradient(135deg, #833ab4, #5851db);
 }
 
+/* ─── Grid Badge (profile view) ───────────────────────────────────── */
+
+.ieh-grid-badge {
+  top: 4px;
+  right: 4px;
+  padding: 3px 7px;
+  min-width: auto;
+  border-radius: 8px;
+  font-size: 10px;
+  z-index: 100;
+}
+
+.ieh-grid-badge .ieh-badge-score {
+  font-size: 11px;
+}
+
+.ieh-grid-badge .ieh-badge-detail {
+  font-size: 9px;
+}
+
+/* ─── Page Indicator ──────────────────────────────────────────────── */
+
+.ieh-page-indicator {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #e1306c;
+  background: rgba(225, 48, 108, 0.08);
+  padding: 3px 8px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
 /* ─── Control Panel ───────────────────────────────────────────────── */
 
 #ieh-panel {
