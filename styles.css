@@ -1,26 +1,27 @@
 /**
- * LinkedIn Engagement Highlighter - Styles
+ * Instagram Engagement Highlighter - Styles
  * Visual highlighting tiers and control panel styling.
+ * Uses Instagram's signature gradient color scheme.
  */
 
 /* ─── Tier Highlights ─────────────────────────────────────────────── */
 
-.leh-tier1 {
-  border: 3px solid #d4a017 !important;
-  box-shadow: 0 0 12px rgba(212, 160, 23, 0.35) !important;
+.ieh-tier1 {
+  border: 3px solid #e1306c !important;
+  box-shadow: 0 0 14px rgba(225, 48, 108, 0.4) !important;
   border-radius: 8px !important;
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
-.leh-tier2 {
-  border: 2px solid #3b82f6 !important;
+.ieh-tier2 {
+  border: 2px solid #833ab4 !important;
   border-radius: 8px !important;
   transition: border-color 0.3s ease;
 }
 
 /* ─── Score Badge ─────────────────────────────────────────────────── */
 
-.leh-score-badge {
+.ieh-score-badge {
   position: absolute;
   top: 8px;
   right: 8px;
@@ -38,14 +39,14 @@
   min-width: 60px;
 }
 
-.leh-badge-score {
+.ieh-badge-score {
   font-size: 12px;
   font-weight: 700;
   line-height: 1.3;
   letter-spacing: 0.01em;
 }
 
-.leh-badge-detail {
+.ieh-badge-detail {
   font-size: 10px;
   font-weight: 500;
   opacity: 0.85;
@@ -53,17 +54,52 @@
   white-space: nowrap;
 }
 
-.leh-tier1 > .leh-score-badge {
-  background: linear-gradient(135deg, #d4a017, #b8860b);
+.ieh-tier1 > .ieh-score-badge {
+  background: linear-gradient(135deg, #f58529, #e1306c, #833ab4);
 }
 
-.leh-tier2 > .leh-score-badge {
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
+.ieh-tier2 > .ieh-score-badge {
+  background: linear-gradient(135deg, #833ab4, #5851db);
+}
+
+/* ─── Grid Badge (profile view) ───────────────────────────────────── */
+
+.ieh-grid-badge {
+  top: 4px;
+  right: 4px;
+  padding: 3px 7px;
+  min-width: auto;
+  border-radius: 8px;
+  font-size: 10px;
+  z-index: 100;
+}
+
+.ieh-grid-badge .ieh-badge-score {
+  font-size: 11px;
+}
+
+.ieh-grid-badge .ieh-badge-detail {
+  font-size: 9px;
+}
+
+/* ─── Page Indicator ──────────────────────────────────────────────── */
+
+.ieh-page-indicator {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #e1306c;
+  background: rgba(225, 48, 108, 0.08);
+  padding: 3px 8px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  text-align: center;
 }
 
 /* ─── Control Panel ───────────────────────────────────────────────── */
 
-#leh-panel {
+#ieh-panel {
   position: fixed;
   top: 70px;
   right: 20px;
@@ -80,33 +116,33 @@
   overflow: hidden;
 }
 
-#leh-panel.leh-collapsed {
+#ieh-panel.ieh-collapsed {
   width: auto;
   min-width: 200px;
 }
 
-.leh-panel-header {
+.ieh-panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  background: linear-gradient(135deg, #0a66c2, #004182);
+  background: linear-gradient(135deg, #f58529, #dd2a7b, #8134af, #515bd4);
   color: #fff;
   cursor: grab;
   border-radius: 10px 10px 0 0;
 }
 
-.leh-collapsed .leh-panel-header {
+.ieh-collapsed .ieh-panel-header {
   border-radius: 10px;
 }
 
-.leh-panel-title {
+.ieh-panel-title {
   font-weight: 700;
   font-size: 13px;
   letter-spacing: 0.02em;
 }
 
-.leh-panel-toggle-collapse {
+.ieh-panel-toggle-collapse {
   background: rgba(255, 255, 255, 0.2);
   border: none;
   color: #fff;
@@ -121,15 +157,15 @@
   line-height: 1;
 }
 
-.leh-panel-toggle-collapse:hover {
+.ieh-panel-toggle-collapse:hover {
   background: rgba(255, 255, 255, 0.35);
 }
 
-.leh-panel-body {
+.ieh-panel-body {
   padding: 12px;
 }
 
-.leh-control-row {
+.ieh-control-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -137,7 +173,7 @@
   gap: 8px;
 }
 
-.leh-label {
+.ieh-label {
   font-size: 12px;
   color: #555;
   display: flex;
@@ -146,12 +182,12 @@
   white-space: nowrap;
 }
 
-.leh-label input[type="checkbox"] {
+.ieh-label input[type="checkbox"] {
   margin: 0;
   cursor: pointer;
 }
 
-.leh-section-label {
+.ieh-section-label {
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -162,20 +198,20 @@
   padding-top: 8px;
 }
 
-.leh-weight-help {
+.ieh-weight-help {
   font-size: 10px;
   color: #aaa;
   margin-bottom: 6px;
 }
 
-.leh-scroll-note {
+.ieh-scroll-note {
   font-size: 10px;
   color: #aaa;
   margin-top: 4px;
   line-height: 1.4;
 }
 
-#leh-panel select {
+#ieh-panel select {
   flex: 1;
   padding: 4px 6px;
   font-size: 12px;
@@ -185,21 +221,21 @@
   color: #333;
 }
 
-#leh-panel input[type="range"] {
+#ieh-panel input[type="range"] {
   flex: 1;
   cursor: pointer;
 }
 
-#leh-threshold-val,
-#leh-scroll-speed-val {
+#ieh-threshold-val,
+#ieh-scroll-speed-val {
   min-width: 20px;
   text-align: right;
   font-size: 12px;
   font-weight: 600;
-  color: #0a66c2;
+  color: #e1306c;
 }
 
-.leh-num-input {
+.ieh-num-input {
   width: 52px;
   padding: 4px 6px;
   font-size: 12px;
@@ -209,68 +245,297 @@
   background: #fafafa;
 }
 
-.leh-num-input:focus {
+.ieh-num-input:focus {
   outline: none;
-  border-color: #0a66c2;
+  border-color: #e1306c;
 }
 
-.leh-btn {
+.ieh-btn {
   width: 100%;
   padding: 8px;
   margin-top: 8px;
   font-size: 12px;
   font-weight: 600;
   color: #fff;
-  background: #0a66c2;
+  background: linear-gradient(135deg, #f58529, #dd2a7b, #8134af);
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: opacity 0.2s;
 }
 
-.leh-btn:hover {
-  background: #004182;
+.ieh-btn:hover {
+  opacity: 0.85;
+}
+
+.ieh-btn-extract {
+  margin-top: 6px;
+}
+
+.ieh-btn-sm {
+  width: auto;
+  padding: 6px 12px;
+  margin-top: 0;
+  font-size: 11px;
+}
+
+.ieh-btn-flash {
+  background: #22c55e !important;
+}
+
+/* ─── Export Modal ────────────────────────────────────────────────── */
+
+.ieh-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(2px);
+}
+
+.ieh-modal {
+  background: #fff;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 800px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.25);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+}
+
+.ieh-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #f58529, #dd2a7b, #8134af, #515bd4);
+  color: #fff;
+}
+
+.ieh-modal-title {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.ieh-modal-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: #fff;
+  font-size: 20px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.ieh-modal-close:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.ieh-modal-actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 18px;
+  border-bottom: 1px solid #eee;
+}
+
+.ieh-modal-body {
+  overflow-y: auto;
+  padding: 0;
+}
+
+.ieh-modal-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.ieh-modal-table thead {
+  position: sticky;
+  top: 0;
+  background: #fafafa;
+  z-index: 1;
+}
+
+.ieh-modal-table th {
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #888;
+  letter-spacing: 0.04em;
+  border-bottom: 2px solid #eee;
+}
+
+.ieh-modal-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: top;
+}
+
+.ieh-modal-table tbody tr:hover {
+  background: #fdf2f8;
+}
+
+.ieh-modal-rank {
+  font-weight: 700;
+  color: #833ab4;
+  width: 30px;
+  text-align: center;
+}
+
+.ieh-modal-user {
+  font-weight: 600;
+  color: #333;
+  white-space: nowrap;
+}
+
+.ieh-modal-metrics {
+  text-align: right;
+  color: #555;
+  white-space: nowrap;
+}
+
+.ieh-modal-score {
+  font-weight: 700;
+  color: #e1306c;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ieh-modal-link-cell {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ieh-modal-link {
+  color: #833ab4;
+  text-decoration: none;
+  font-size: 11px;
+}
+
+.ieh-modal-link:hover {
+  text-decoration: underline;
+}
+
+.ieh-caption-row td {
+  padding: 0 10px 8px 10px;
+  border-bottom: 1px solid #eee;
+}
+
+.ieh-modal-caption {
+  font-size: 11px;
+  color: #777;
+  line-height: 1.4;
+  display: block;
+  max-width: 600px;
+  word-break: break-word;
+}
+
+.ieh-modal-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: #999;
+  font-size: 14px;
 }
 
 /* ─── Dark Mode Compatibility ─────────────────────────────────────── */
 
 @media (prefers-color-scheme: dark) {
-  #leh-panel {
-    background: #1b1f23;
+  #ieh-panel {
+    background: #1a1a1a;
     border-color: #333;
     color: #e0e0e0;
   }
 
-  .leh-label {
+  .ieh-label {
     color: #aaa;
   }
 
-  .leh-section-label {
+  .ieh-section-label {
     color: #777;
     border-top-color: #333;
   }
 
-  .leh-weight-help,
-  .leh-scroll-note {
+  .ieh-weight-help,
+  .ieh-scroll-note {
     color: #666;
   }
 
-  #leh-panel select,
-  .leh-num-input {
+  #ieh-panel select,
+  .ieh-num-input {
     background: #2d2d2d;
     border-color: #444;
     color: #e0e0e0;
   }
 
-  .leh-score-badge {
+  .ieh-score-badge {
     background: rgba(30, 30, 30, 0.88);
+  }
+
+  .ieh-modal {
+    background: #1a1a1a;
+    color: #e0e0e0;
+  }
+
+  .ieh-modal-table thead {
+    background: #222;
+  }
+
+  .ieh-modal-table th {
+    color: #888;
+    border-bottom-color: #333;
+  }
+
+  .ieh-modal-table td {
+    border-bottom-color: #2a2a2a;
+  }
+
+  .ieh-modal-table tbody tr:hover {
+    background: #2a1a2a;
+  }
+
+  .ieh-modal-user {
+    color: #e0e0e0;
+  }
+
+  .ieh-modal-metrics {
+    color: #aaa;
+  }
+
+  .ieh-modal-caption {
+    color: #888;
+  }
+
+  .ieh-modal-actions {
+    border-bottom-color: #333;
+  }
+
+  .ieh-caption-row td {
+    border-bottom-color: #333;
   }
 }
 
-/* LinkedIn dark mode class-based detection */
-.theme--dark #leh-panel,
-[data-dark-mode="true"] #leh-panel {
-  background: #1b1f23;
+/* Instagram dark mode class-based detection */
+.dark-mode #ieh-panel,
+[data-theme="dark"] #ieh-panel {
+  background: #1a1a1a;
   border-color: #333;
   color: #e0e0e0;
 }
