@@ -22,9 +22,15 @@
 
   // ─── Auto-scroll state ───────────────────────────────────────────────
   let autoScrollEnabled = false;
-  let autoScrollInterval = null;
-  let autoScrollSpeed = 2;
-  let autoScrollTick = 80;
+  let autoScrollRafId = null;
+  let autoScrollSpeed = 3; // 1-6, default to middle-fast
+  let lastScrollTime = 0;
+
+  // Speed presets: pixels per second (mapped from slider 1-6)
+  const SCROLL_SPEEDS = [300, 600, 1200, 2200, 3500, 5500];
+
+  // ─── Scoring cache ─────────────────────────────────────────────────
+  const scoredCache = new WeakMap();
 
   // ─── Page Type Detection ─────────────────────────────────────────────
 
@@ -606,7 +612,7 @@
         } else if (item.score >= medianThreshold && item.score > 0) {
           item.element.classList.add("ieh-tier2");
         }
-        if (showScores) addScoreBadge(item);
+        if (showScores) addScoreBadge(item, scoredPosts);
       }
     } else {
       for (const item of scoredPosts) {
@@ -616,7 +622,7 @@
         } else if (item.score >= absoluteThreshold) {
           item.element.classList.add("ieh-tier2");
         }
-        if (showScores) addScoreBadge(item);
+        if (showScores) addScoreBadge(item, scoredPosts);
       }
     }
   }
@@ -629,15 +635,32 @@
     return String(n);
   }
 
-  function addScoreBadge(item) {
+  /**
+   * Assigns a color tier based on percentile rank.
+   * Returns: "gold", "green", "blue", or "gray"
+   */
+  function getScoreColor(item, allScored) {
+    if (item.score === 0) return "gray";
+    const rank = allScored.filter((s) => s.score > item.score).length;
+    const pct = rank / allScored.length;
+    if (pct < 0.1) return "gold";   // top 10%
+    if (pct < 0.3) return "green";  // top 30%
+    if (pct < 0.6) return "blue";   // top 60%
+    return "gray";                   // bottom 40%
+  }
+
+  function addScoreBadge(item, allScored) {
     const existing = item.element.querySelector(".ieh-score-badge");
     if (existing) existing.remove();
 
     if (!showScores) return;
 
     const badge = document.createElement("div");
+    const colorTier = allScored ? getScoreColor(item, allScored) : "gray";
     badge.className =
-      "ieh-score-badge" + (item.type === "grid" ? " ieh-grid-badge" : "");
+      "ieh-score-badge" +
+      (item.type === "grid" ? " ieh-grid-badge" : "") +
+      " ieh-color-" + colorTier;
 
     const parts = [];
     if (item.engagement.likes > 0)
@@ -649,18 +672,12 @@
 
     const breakdown = parts.length > 0 ? parts.join("  ") : "no data";
 
-    if (item.type === "grid") {
-      // Compact badge for grid thumbnails
-      badge.innerHTML = `<span class="ieh-badge-score">${item.score.toLocaleString()}</span><span class="ieh-badge-detail">${breakdown}</span>`;
-    } else {
-      badge.innerHTML = `<span class="ieh-badge-score">${item.score.toLocaleString()}</span><span class="ieh-badge-detail">${breakdown}</span>`;
-    }
+    badge.innerHTML = `<span class="ieh-badge-score">${item.score.toLocaleString()}</span><span class="ieh-badge-detail">${breakdown}</span>`;
 
     const computedStyle = window.getComputedStyle(item.element);
     if (computedStyle.position === "static") {
       item.element.style.position = "relative";
     }
-    // Ensure the badge is visible over Instagram's overlays
     if (item.type === "grid") {
       item.element.style.overflow = "visible";
     }
@@ -670,26 +687,45 @@
 
   // ─── Main Processing ─────────────────────────────────────────────────
 
-  function processAllPosts() {
+  let lastScoredPosts = [];
+
+  function processAllPosts(forceRefresh) {
     if (!enabled) {
       clearHighlights();
       return;
     }
 
     const posts = findAllPosts();
+    let hasNew = false;
     const scoredPosts = [];
 
     for (const postInfo of posts) {
+      // Use cache unless forced refresh
+      const cached = !forceRefresh && scoredCache.get(postInfo.element);
+      if (cached) {
+        scoredPosts.push(cached);
+        continue;
+      }
+
+      hasNew = true;
       const engagement = extractEngagement(postInfo);
       const score = calculateScore(engagement);
-      scoredPosts.push({
+      const entry = {
         element: postInfo.element,
         type: postInfo.type,
         score,
         engagement,
-      });
+      };
+      scoredCache.set(postInfo.element, entry);
+      scoredPosts.push(entry);
     }
 
+    // If nothing changed and not forced, skip the expensive DOM update
+    if (!hasNew && !forceRefresh && lastScoredPosts.length === scoredPosts.length) {
+      return;
+    }
+
+    lastScoredPosts = scoredPosts;
     clearHighlights();
     applyHighlights(scoredPosts);
   }
@@ -754,25 +790,31 @@
   // ─── Auto-scroll ─────────────────────────────────────────────────────
 
   function startAutoScroll() {
-    if (autoScrollInterval) return;
+    if (autoScrollRafId) return;
+    lastScrollTime = performance.now();
 
-    let tick = 0;
-    autoScrollInterval = setInterval(() => {
+    function scrollStep(now) {
       if (!autoScrollEnabled) {
-        stopAutoScroll();
+        autoScrollRafId = null;
         return;
       }
-      const variance =
-        tick % 23 < 12 ? autoScrollSpeed : autoScrollSpeed + 1;
-      window.scrollBy({ top: variance, behavior: "instant" });
-      tick++;
-    }, autoScrollTick);
+      const delta = now - lastScrollTime;
+      lastScrollTime = now;
+      const pxPerSec = SCROLL_SPEEDS[Math.min(autoScrollSpeed - 1, 5)] || 1200;
+      const px = (pxPerSec * delta) / 1000;
+      // Add subtle variance so it doesn't look robotic
+      const variance = 1 + Math.sin(now / 800) * 0.15;
+      window.scrollBy({ top: px * variance, behavior: "instant" });
+      autoScrollRafId = requestAnimationFrame(scrollStep);
+    }
+
+    autoScrollRafId = requestAnimationFrame(scrollStep);
   }
 
   function stopAutoScroll() {
-    if (autoScrollInterval) {
-      clearInterval(autoScrollInterval);
-      autoScrollInterval = null;
+    if (autoScrollRafId) {
+      cancelAnimationFrame(autoScrollRafId);
+      autoScrollRafId = null;
     }
   }
 
@@ -844,11 +886,11 @@
         </div>
         <div class="ieh-control-row">
           <label class="ieh-label">Speed:</label>
-          <input type="range" id="ieh-scroll-speed" min="1" max="6" value="2" step="1" />
-          <span id="ieh-scroll-speed-val">2</span>
+          <input type="range" id="ieh-scroll-speed" min="1" max="6" value="3" step="1" />
+          <span id="ieh-scroll-speed-val">3</span>
         </div>
         <div class="ieh-scroll-note">
-          Auto-scroll smoothly scrolls through your Instagram feed so the highlighter can score posts as they load.
+          Smoothly scrolls through your feed. Speed 1 = gentle, 6 = turbo.
         </div>
 
         <!-- Extract top posts section -->
@@ -925,7 +967,7 @@
       mode = e.target.value;
       const thresholdRow = panel.querySelector(".ieh-threshold-row");
       thresholdRow.style.display = mode === "threshold" ? "flex" : "none";
-      processAllPosts();
+      processAllPosts(true);
       saveSettings();
     });
 
@@ -941,13 +983,14 @@
     document
       .getElementById("ieh-threshold")
       .addEventListener("change", () => {
-        processAllPosts();
+        processAllPosts(true);
       });
 
     document
       .getElementById("ieh-w-likes")
       .addEventListener("change", (e) => {
         weights.likes = parseFloat(e.target.value) || 0;
+        processAllPosts(true);
         saveSettings();
       });
 
@@ -955,6 +998,7 @@
       .getElementById("ieh-w-comments")
       .addEventListener("change", (e) => {
         weights.comments = parseFloat(e.target.value) || 0;
+        processAllPosts(true);
         saveSettings();
       });
 
@@ -962,13 +1006,14 @@
       .getElementById("ieh-w-views")
       .addEventListener("change", (e) => {
         weights.views = parseFloat(e.target.value) || 0;
+        processAllPosts(true);
         saveSettings();
       });
 
     document
       .getElementById("ieh-recalculate")
       .addEventListener("click", () => {
-        processAllPosts();
+        processAllPosts(true);
       });
 
     // ── Auto-scroll controls ──
@@ -1315,7 +1360,7 @@
         scrollTimer = setTimeout(() => {
           processAllPosts();
           updateExtractCount();
-        }, 500);
+        }, 200);
       },
       { passive: true }
     );

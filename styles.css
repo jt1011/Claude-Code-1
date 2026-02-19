@@ -54,13 +54,7 @@
   white-space: nowrap;
 }
 
-.ieh-tier1 > .ieh-score-badge {
-  background: linear-gradient(135deg, #f58529, #e1306c, #833ab4);
-}
-
-.ieh-tier2 > .ieh-score-badge {
-  background: linear-gradient(135deg, #833ab4, #5851db);
-}
+/* Tier badge colors are now handled by .ieh-color-* classes */
 
 /* ─── Grid Badge (profile view) ───────────────────────────────────── */
 
@@ -80,6 +74,31 @@
 
 .ieh-grid-badge .ieh-badge-detail {
   font-size: 9px;
+}
+
+/* ─── Color-coded Score Tiers ────────────────────────────────────── */
+
+.ieh-color-gold {
+  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.5);
+}
+
+.ieh-color-green {
+  background: linear-gradient(135deg, #10b981, #059669) !important;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.4);
+}
+
+.ieh-color-blue {
+  background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.35);
+}
+
+.ieh-color-gray {
+  background: rgba(80, 80, 80, 0.75) !important;
+  color: #ccc;
 }
 
 /* ─── Page Indicator ──────────────────────────────────────────────── */
