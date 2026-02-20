@@ -54,8 +54,6 @@
   white-space: nowrap;
 }
 
-/* Tier badge colors are now handled by .ieh-color-* classes */
-
 /* ─── Grid Badge (profile view) ───────────────────────────────────── */
 
 .ieh-grid-badge {
@@ -122,7 +120,8 @@
   position: fixed;
   top: 70px;
   right: 20px;
-  width: 250px;
+  width: 260px;
+  max-height: 85vh;
   background: #ffffff;
   border: 1px solid #e0e0e0;
   border-radius: 10px;
@@ -133,6 +132,8 @@
   color: #333;
   user-select: none;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 #ieh-panel.ieh-collapsed {
@@ -149,6 +150,7 @@
   color: #fff;
   cursor: grab;
   border-radius: 10px 10px 0 0;
+  flex-shrink: 0;
 }
 
 .ieh-collapsed .ieh-panel-header {
@@ -182,6 +184,8 @@
 
 .ieh-panel-body {
   padding: 12px;
+  overflow-y: auto;
+  flex: 1;
 }
 
 .ieh-control-row {
@@ -302,6 +306,53 @@
   background: #22c55e !important;
 }
 
+/* ─── Scan Button & Status ───────────────────────────────────────── */
+
+.ieh-btn-scan {
+  background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.ieh-btn-stop {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+.ieh-scan-status {
+  font-size: 10px;
+  color: #888;
+  margin-top: 6px;
+  line-height: 1.4;
+  min-height: 14px;
+}
+
+.ieh-scan-active {
+  color: #10b981;
+  font-weight: 600;
+  animation: ieh-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes ieh-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ─── Date Input ──────────────────────────────────────────────────── */
+
+.ieh-date-input {
+  flex: 1;
+  padding: 4px 6px;
+  font-size: 11px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fafafa;
+  color: #333;
+  font-family: inherit;
+}
+
+.ieh-date-input:focus {
+  outline: none;
+  border-color: #e1306c;
+}
+
 /* ─── Export Modal ────────────────────────────────────────────────── */
 
 .ieh-modal-overlay {
@@ -321,9 +372,9 @@
 .ieh-modal {
   background: #fff;
   border-radius: 12px;
-  width: 90%;
-  max-width: 800px;
-  max-height: 80vh;
+  width: 92%;
+  max-width: 950px;
+  max-height: 85vh;
   display: flex;
   flex-direction: column;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.25);
@@ -342,7 +393,7 @@
 
 .ieh-modal-title {
   font-weight: 700;
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .ieh-modal-close {
@@ -379,7 +430,7 @@
 .ieh-modal-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .ieh-modal-table thead {
@@ -390,18 +441,19 @@
 }
 
 .ieh-modal-table th {
-  padding: 8px 10px;
+  padding: 8px 8px;
   text-align: left;
   font-weight: 700;
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
   color: #888;
   letter-spacing: 0.04em;
   border-bottom: 2px solid #eee;
+  white-space: nowrap;
 }
 
 .ieh-modal-table td {
-  padding: 8px 10px;
+  padding: 6px 8px;
   border-bottom: 1px solid #f0f0f0;
   vertical-align: top;
 }
@@ -413,7 +465,7 @@
 .ieh-modal-rank {
   font-weight: 700;
   color: #833ab4;
-  width: 30px;
+  width: 28px;
   text-align: center;
 }
 
@@ -436,8 +488,18 @@
   white-space: nowrap;
 }
 
+.ieh-modal-date {
+  font-size: 10px;
+  color: #777;
+  white-space: nowrap;
+}
+
+.ieh-modal-type {
+  white-space: nowrap;
+}
+
 .ieh-modal-link-cell {
-  max-width: 180px;
+  max-width: 150px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -446,7 +508,7 @@
 .ieh-modal-link {
   color: #833ab4;
   text-decoration: none;
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .ieh-modal-link:hover {
@@ -454,16 +516,16 @@
 }
 
 .ieh-caption-row td {
-  padding: 0 10px 8px 10px;
+  padding: 0 8px 6px 8px;
   border-bottom: 1px solid #eee;
 }
 
 .ieh-modal-caption {
-  font-size: 11px;
+  font-size: 10px;
   color: #777;
   line-height: 1.4;
   display: block;
-  max-width: 600px;
+  max-width: 700px;
   word-break: break-word;
 }
 
@@ -473,6 +535,179 @@
   color: #999;
   font-size: 14px;
 }
+
+/* ─── Type Chips ──────────────────────────────────────────────────── */
+
+.ieh-type-chip {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.ieh-type-reel {
+  background: rgba(225, 48, 108, 0.12);
+  color: #e1306c;
+}
+
+.ieh-type-photo {
+  background: rgba(81, 91, 212, 0.12);
+  color: #515bd4;
+}
+
+.ieh-type-carousel {
+  background: rgba(131, 58, 180, 0.12);
+  color: #833ab4;
+}
+
+/* ─── Time Summary Chips ─────────────────────────────────────────── */
+
+.ieh-time-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 18px;
+  border-bottom: 1px solid #eee;
+}
+
+.ieh-time-chip {
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba(131, 58, 180, 0.08);
+  color: #833ab4;
+  padding: 4px 10px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+/* ─── Calendar Heatmap ────────────────────────────────────────────── */
+
+.ieh-cal-container {
+  padding: 12px 18px;
+  border-bottom: 1px solid #eee;
+}
+
+.ieh-calendar {
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+.ieh-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.ieh-cal-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #333;
+}
+
+.ieh-cal-nav {
+  background: none;
+  border: 1px solid #ddd;
+  color: #666;
+  font-size: 18px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: background 0.15s;
+}
+
+.ieh-cal-nav:hover {
+  background: #f0f0f0;
+}
+
+.ieh-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.ieh-cal-day-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: #aaa;
+  text-align: center;
+  text-transform: uppercase;
+  padding: 4px 0;
+}
+
+.ieh-cal-cell {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  position: relative;
+  min-height: 32px;
+  transition: background 0.15s;
+}
+
+.ieh-cal-empty {
+  background: transparent;
+}
+
+.ieh-cal-day-num {
+  font-size: 11px;
+  font-weight: 500;
+  color: #555;
+  line-height: 1;
+}
+
+.ieh-cal-dot {
+  font-size: 8px;
+  font-weight: 700;
+  color: #fff;
+  margin-top: 2px;
+  line-height: 1;
+}
+
+.ieh-cal-has-posts {
+  cursor: pointer;
+}
+
+.ieh-cal-has-posts:hover {
+  opacity: 0.8;
+  transform: scale(1.05);
+}
+
+.ieh-cal-today {
+  outline: 2px solid #e1306c;
+  outline-offset: -1px;
+}
+
+/* Calendar heat levels */
+.ieh-cal-cool {
+  background: rgba(131, 58, 180, 0.15);
+}
+.ieh-cal-cool .ieh-cal-day-num { color: #833ab4; }
+
+.ieh-cal-mild {
+  background: rgba(131, 58, 180, 0.3);
+}
+.ieh-cal-mild .ieh-cal-day-num { color: #fff; }
+
+.ieh-cal-warm {
+  background: rgba(225, 48, 108, 0.5);
+}
+.ieh-cal-warm .ieh-cal-day-num { color: #fff; }
+
+.ieh-cal-hot {
+  background: linear-gradient(135deg, #e1306c, #f58529);
+}
+.ieh-cal-hot .ieh-cal-day-num { color: #fff; font-weight: 700; }
 
 /* ─── Dark Mode Compatibility ─────────────────────────────────────── */
 
@@ -498,7 +733,8 @@
   }
 
   #ieh-panel select,
-  .ieh-num-input {
+  .ieh-num-input,
+  .ieh-date-input {
     background: #2d2d2d;
     border-color: #444;
     color: #e0e0e0;
@@ -506,6 +742,10 @@
 
   .ieh-score-badge {
     background: rgba(30, 30, 30, 0.88);
+  }
+
+  .ieh-scan-status {
+    color: #777;
   }
 
   .ieh-modal {
@@ -538,6 +778,10 @@
     color: #aaa;
   }
 
+  .ieh-modal-date {
+    color: #999;
+  }
+
   .ieh-modal-caption {
     color: #888;
   }
@@ -549,6 +793,38 @@
   .ieh-caption-row td {
     border-bottom-color: #333;
   }
+
+  .ieh-time-summary {
+    border-bottom-color: #333;
+  }
+
+  .ieh-time-chip {
+    background: rgba(131, 58, 180, 0.15);
+    color: #bb86fc;
+  }
+
+  .ieh-cal-container {
+    border-bottom-color: #333;
+  }
+
+  .ieh-cal-title {
+    color: #e0e0e0;
+  }
+
+  .ieh-cal-nav {
+    border-color: #444;
+    color: #aaa;
+  }
+
+  .ieh-cal-nav:hover {
+    background: #333;
+  }
+
+  .ieh-cal-day-num {
+    color: #aaa;
+  }
+
+  .ieh-cal-cool .ieh-cal-day-num { color: #bb86fc; }
 }
 
 /* Instagram dark mode class-based detection */
