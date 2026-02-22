@@ -1,10 +1,12 @@
 /**
- * Instagram Engagement Highlighter - Content Script
+ * LinkedIn Engagement Highlighter V3 - Content Script
  *
- * Works on both feed view AND profile grid view.
- * Reads only visible DOM elements to calculate engagement scores.
- * No network requests. No data storage. No automation.
- * Purely a client-side visual enhancement layer.
+ * Works on Feed, Activity, Company, and Search pages.
+ * Features: 4-tier highlighting, score badges, date filtering,
+ * extract & export with preview, smooth auto-scroll.
+ *
+ * Reads only visible DOM elements. No network requests.
+ * No data collection. Purely a client-side visual layer.
  */
 
 (function () {
@@ -15,40 +17,46 @@
   let showScores = true;
   let mode = "percentile"; // "percentile" or "threshold"
   let absoluteThreshold = 100;
-  let weights = { likes: 5, comments: 10, views: 2 };
+  let weights = { reactions: 5, comments: 10, reposts: 2 };
   let debounceTimer = null;
 
   const DEBOUNCE_MS = 300;
 
+  // ─── Date filter state ───────────────────────────────────────────────
+  let dateFilter = "all"; // "all" | "24h" | "7d" | "30d" | "90d" | "custom"
+  let customDateFrom = "";
+  let customDateTo = "";
+
   // ─── Auto-scroll state ───────────────────────────────────────────────
   let autoScrollEnabled = false;
   let autoScrollRafId = null;
-  let autoScrollSpeed = 3; // 1-6, default to middle-fast
+  let autoScrollSpeed = 3;
   let lastScrollTime = 0;
+  let showMoreHandled = false;
 
-  // Speed presets: pixels per second (mapped from slider 1-6)
   const SCROLL_SPEEDS = [300, 600, 1200, 2200, 3500, 5500];
 
-  // ─── Scoring cache ─────────────────────────────────────────────────
+  // ─── Scoring cache ──────────────────────────────────────────────────
   const scoredCache = new WeakMap();
+  let lastScoredPosts = [];
 
-  // ─── Page Type Detection ─────────────────────────────────────────────
+  // ─── Page Type Detection ────────────────────────────────────────────
 
-  /**
-   * Determines the current Instagram page type.
-   * Returns: "feed", "profile", "post", or "explore"
-   */
   function getPageType() {
     const path = window.location.pathname;
-    if (path === "/" || path === "") return "feed";
-    if (path.includes("/p/") || path.includes("/reel/")) return "post";
-    if (path.startsWith("/explore")) return "explore";
-    // Profile pages: /<username>/ with optional tabs like /tagged/ /reels/
-    if (/^\/[A-Za-z0-9_.]+\/?/.test(path)) return "profile";
+    if (path === "/feed" || path === "/feed/" || path === "/" || path === "") return "feed";
+    if (path.includes("/recent-activity")) return "activity";
+    if (path.startsWith("/company/")) return "company";
+    if (path.startsWith("/search/")) return "search";
+    if (path.startsWith("/posts/")) return "post";
+    if (path.startsWith("/in/")) {
+      if (path.includes("/detail/") || path.includes("/overlay/")) return "post";
+      return "profile";
+    }
     return "feed";
   }
 
-  // ─── Number Parsing ──────────────────────────────────────────────────
+  // ─── Number Parsing ─────────────────────────────────────────────────
 
   function parseCount(text) {
     if (!text) return 0;
@@ -62,9 +70,6 @@
     return Math.round(num * (multipliers[suffix] || 1));
   }
 
-  /**
-   * Extracts first number (with optional K/M/B) from a string.
-   */
   function extractFirstNumber(text) {
     if (!text) return 0;
     const match = text.match(/([\d,]+\.?\d*)\s*([KMB])?/i);
@@ -72,526 +77,538 @@
     return parseCount(match[1].replace(/,/g, "") + (match[2] || ""));
   }
 
-  // ─── Post Detection ──────────────────────────────────────────────────
+  function formatCount(n) {
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
+    if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
+    return String(n);
+  }
+
+  // ─── Post Detection ─────────────────────────────────────────────────
 
   /**
-   * Unified post finder that works on both feed and profile pages.
-   * Returns an array of { element, type } where type is "feed" or "grid".
+   * Unified post finder. Returns array of { element, type }.
+   * Uses multiple selector strategies for resilience against LinkedIn DOM changes.
    */
   function findAllPosts() {
-    const pageType = getPageType();
-
-    if (pageType === "profile" || pageType === "explore") {
-      return findGridPosts();
-    }
-
-    // Feed / single post view
-    return findFeedPosts();
-  }
-
-  /**
-   * Finds feed-style post containers (scrolling feed, single post view).
-   */
-  function findFeedPosts() {
-    const selectors = [
-      'article[role="presentation"]',
-      'main article',
-      'article',
-    ];
+    const mainArea =
+      document.querySelector("main") ||
+      document.querySelector(".scaffold-layout__main") ||
+      document.querySelector('[role="main"]') ||
+      document.body;
 
     let posts = [];
-    for (const selector of selectors) {
-      posts = Array.from(document.querySelectorAll(selector));
-      if (posts.length > 0) break;
-    }
 
-    // Filter nested articles
-    const filtered = posts.filter((post) => {
-      return !posts.some((other) => other !== post && other.contains(post));
-    });
+    // Strategy 1: Known LinkedIn post class
+    posts = Array.from(mainArea.querySelectorAll(".feed-shared-update-v2"));
+    if (posts.length > 0) return deduplicatePosts(posts);
 
-    const result = filtered.length > 0 ? filtered : posts;
-    return result.map((el) => ({ element: el, type: "feed" }));
-  }
-
-  /**
-   * Finds profile grid post items.
-   * On profile pages, posts are displayed as a 3-column grid of thumbnails.
-   * Each grid cell contains a link to /p/<shortcode>/ or /reel/<shortcode>/
-   * with engagement data in a hover overlay (likes + comments).
-   */
-  function findGridPosts() {
-    // Strategy 1: Find all links pointing to individual posts within the main content
-    // These are the grid thumbnail links
-    const postLinks = document.querySelectorAll(
-      'main a[href*="/p/"], main a[href*="/reel/"]'
+    // Strategy 2: Data URN attributes (activity posts)
+    posts = Array.from(
+      mainArea.querySelectorAll(
+        'div[data-urn*="urn:li:activity"], div[data-urn*="urn:li:ugcPost"]'
+      )
     );
+    if (posts.length > 0) return deduplicatePosts(posts);
 
-    if (postLinks.length === 0) return [];
-
-    const seen = new Set();
-    const results = [];
-
-    for (const link of postLinks) {
-      const href = link.getAttribute("href") || "";
-      if (seen.has(href)) continue;
-      seen.add(href);
-
-      // The grid cell is typically the link itself or its immediate parent div.
-      // We want the container that forms the visual grid cell so we can
-      // add borders and badges to it.
-      // Walk up to find the element that has a square aspect ratio / grid role.
-      let gridCell = link;
-
-      // Walk up a few levels to find the actual grid cell container
-      // (the div that gives the square shape in the 3-column grid)
-      let parent = link.parentElement;
-      for (let i = 0; i < 4 && parent; i++) {
-        // If the parent is a grid/flex item or has similar dimensions to the link
-        const style = window.getComputedStyle(parent);
-        if (
-          parent.tagName === "ARTICLE" ||
-          parent.tagName === "MAIN" ||
-          parent === document.body
-        ) {
-          break;
-        }
-        // If this parent looks like a grid row (wider than a single cell), stop
-        if (parent.children.length >= 3 && style.display === "flex") {
-          break;
-        }
-        gridCell = parent;
-        parent = parent.parentElement;
-      }
-
-      results.push({ element: gridCell, linkElement: link, type: "grid" });
+    // Strategy 3: Occludable update wrappers (LinkedIn's virtual scroll)
+    posts = Array.from(mainArea.querySelectorAll(".occludable-update"));
+    if (posts.length > 0) {
+      // Get the inner post container if available
+      const inner = posts
+        .map((p) => p.querySelector(".feed-shared-update-v2") || p)
+        .filter(Boolean);
+      if (inner.length > 0) return deduplicatePosts(inner);
     }
 
-    return results;
+    // Strategy 4: Walk up from social action bars
+    const socialBars = mainArea.querySelectorAll(
+      '.feed-shared-social-actions, .social-details-social-activity, [class*="social-action"]'
+    );
+    if (socialBars.length > 0) {
+      const containers = [];
+      for (const bar of socialBars) {
+        let container = bar.parentElement;
+        for (let i = 0; i < 6 && container; i++) {
+          if (
+            container.getAttribute("data-urn") ||
+            container.getAttribute("data-id") ||
+            container.classList.contains("feed-shared-update-v2") ||
+            container.classList.contains("occludable-update")
+          ) {
+            containers.push(container);
+            break;
+          }
+          container = container.parentElement;
+        }
+      }
+      if (containers.length > 0) return deduplicatePosts(containers);
+    }
+
+    // Strategy 5: Walk up from social counts
+    const countEls = mainArea.querySelectorAll(
+      '.social-details-social-counts, [class*="social-counts"]'
+    );
+    if (countEls.length > 0) {
+      const containers = [];
+      for (const el of countEls) {
+        let container = el;
+        for (let i = 0; i < 7; i++) {
+          container = container.parentElement;
+          if (!container || container === mainArea || container === document.body) break;
+          if (
+            container.getAttribute("data-urn") ||
+            container.getAttribute("data-id") ||
+            container.classList.contains("feed-shared-update-v2")
+          ) {
+            containers.push(container);
+            break;
+          }
+        }
+      }
+      if (containers.length > 0) return deduplicatePosts(containers);
+    }
+
+    // Strategy 6: Generic structural detection
+    // Look for containers in main that have multiple buttons (social actions)
+    const allDivs = mainArea.querySelectorAll(":scope > div > div");
+    const candidates = [];
+    for (const div of allDivs) {
+      const buttons = div.querySelectorAll("button");
+      if (buttons.length >= 3) {
+        // Check if any button text suggests social actions
+        let hasSocialAction = false;
+        for (const btn of buttons) {
+          const text = (btn.textContent || "").trim().toLowerCase();
+          const label = (btn.getAttribute("aria-label") || "").toLowerCase();
+          if (
+            text.includes("like") || text.includes("comment") ||
+            text.includes("repost") || text.includes("send") ||
+            label.includes("like") || label.includes("comment") ||
+            label.includes("react")
+          ) {
+            hasSocialAction = true;
+            break;
+          }
+        }
+        if (hasSocialAction) candidates.push(div);
+      }
+    }
+    if (candidates.length > 0) return deduplicatePosts(candidates);
+
+    return [];
   }
 
-  // ─── Engagement Extraction ───────────────────────────────────────────
-
   /**
-   * Unified engagement extraction. Dispatches to feed or grid strategy.
+   * Removes nested/duplicate containers and returns { element, type } array.
    */
+  function deduplicatePosts(elements) {
+    const unique = elements.filter((el, idx) => {
+      // Remove duplicates
+      if (elements.indexOf(el) !== idx) return false;
+      // Remove nested: if another element contains this one, skip it
+      return !elements.some((other) => other !== el && other.contains(el));
+    });
+    return unique.map((el) => ({ element: el, type: "feed" }));
+  }
+
+  // ─── Engagement Extraction ──────────────────────────────────────────
+
   function extractEngagement(postInfo) {
-    if (postInfo.type === "grid") {
-      return extractGridEngagement(postInfo);
-    }
-    return extractFeedEngagement(postInfo.element);
-  }
-
-  /**
-   * Extracts engagement from a profile grid cell.
-   *
-   * Instagram grid cells have a hover overlay that contains:
-   * - An <ul> or <div> with <li> items for likes and comments
-   * - Each <li> has an SVG icon + <span> with the count
-   * - The overlay is in the DOM but hidden until hover (opacity/visibility)
-   *
-   * Also checks for accessible text (aria-label, alt, title) which
-   * Instagram sometimes puts on images or links with engagement counts.
-   */
-  function extractGridEngagement(postInfo) {
-    const el = postInfo.element;
-    const linkEl = postInfo.linkElement || el;
-    let likes = 0;
+    const postEl = postInfo.element;
+    let reactions = 0;
     let comments = 0;
-    let views = 0;
+    let reposts = 0;
 
-    // Strategy 1: Look for the hover overlay content
-    // Instagram grid overlays contain <li> elements with SVG + span pairs
-    const listItems = el.querySelectorAll("li");
-    for (const li of listItems) {
-      const text = (li.textContent || "").trim();
-      const num = extractFirstNumber(text);
-      if (num === 0) continue;
-
-      // Determine type by SVG path or by position
-      // Instagram uses specific SVG shapes: heart for likes, speech bubble for comments
-      const svg = li.querySelector("svg");
-      if (svg) {
-        const svgContent = svg.innerHTML || "";
-        const ariaLabel = (svg.getAttribute("aria-label") || "").toLowerCase();
-
-        if (
-          ariaLabel.includes("like") ||
-          svgContent.includes("M34.6 3.1") || // Instagram heart path
-          svgContent.includes("M16 5.3") ||    // Alternate heart path
-          svgContent.includes("heart")
-        ) {
-          likes = Math.max(likes, num);
-          continue;
-        }
-        if (
-          ariaLabel.includes("comment") ||
-          svgContent.includes("M20.656 17.008") || // Instagram comment path
-          svgContent.includes("M47.5 46.1") ||      // Alternate comment path
-          svgContent.includes("comment") ||
-          svgContent.includes("bubble")
-        ) {
-          comments = Math.max(comments, num);
-          continue;
-        }
-        if (ariaLabel.includes("view") || ariaLabel.includes("play")) {
-          views = Math.max(views, num);
-          continue;
-        }
+    // Strategy 1: Social counts container (most reliable)
+    const socialCounts = postEl.querySelector(
+      '.social-details-social-counts, [class*="social-counts"]'
+    );
+    if (socialCounts) {
+      // Reactions count
+      const reactionEl =
+        socialCounts.querySelector(
+          '.social-details-social-counts__reactions-count'
+        ) ||
+        socialCounts.querySelector('[data-control-name="reactions_count"]') ||
+        socialCounts.querySelector('button[aria-label*="reaction"] span') ||
+        socialCounts.querySelector('span[class*="reactions-count"]');
+      if (reactionEl) {
+        reactions = extractFirstNumber(reactionEl.textContent);
       }
 
-      // Fallback: first number = likes, second = comments (Instagram's order)
-      if (likes === 0) {
-        likes = num;
-      } else if (comments === 0) {
-        comments = num;
-      }
-    }
-
-    // Strategy 2: Check for span elements with counts (newer IG layouts)
-    if (likes === 0 && comments === 0) {
-      const spans = el.querySelectorAll("span");
-      const numbers = [];
-      for (const span of spans) {
-        // Only look at leaf spans (no child elements or just text)
-        if (span.children.length > 1) continue;
-        const text = (span.textContent || "").trim();
-        const num = extractFirstNumber(text);
-        if (num > 0 && text.length < 15) {
-          numbers.push(num);
-        }
-      }
-      // Instagram hover overlay shows likes first, comments second
-      if (numbers.length >= 1) likes = numbers[0];
-      if (numbers.length >= 2) comments = numbers[1];
-    }
-
-    // Strategy 3: Check aria-label on the link or image
-    // Instagram sometimes puts "X likes, Y comments" in aria-label
-    if (likes === 0 && comments === 0) {
-      const ariaTargets = [linkEl, el, ...el.querySelectorAll("img, a, div[role]")];
-      for (const target of ariaTargets) {
-        if (!target) continue;
-        const label = (
-          target.getAttribute("aria-label") ||
-          target.getAttribute("alt") ||
-          target.getAttribute("title") ||
-          ""
-        );
-        if (!label) continue;
-
-        const likesMatch = label.match(/([\d,]+\.?\d*[KMB]?)\s*likes?/i);
-        if (likesMatch) likes = parseCount(likesMatch[1].replace(/,/g, ""));
-
-        const commentsMatch = label.match(/([\d,]+\.?\d*[KMB]?)\s*comments?/i);
-        if (commentsMatch) comments = parseCount(commentsMatch[1].replace(/,/g, ""));
-
-        const viewsMatch = label.match(/([\d,]+\.?\d*[KMB]?)\s*(?:views?|plays?)/i);
-        if (viewsMatch) views = parseCount(viewsMatch[1].replace(/,/g, ""));
-
-        if (likes > 0 || comments > 0) break;
-      }
-    }
-
-    // Strategy 4: Check for video play/view indicators
-    if (views === 0) {
-      const allText = el.querySelectorAll("span, div");
-      for (const node of allText) {
-        if (node.children.length > 2) continue;
-        const text = (node.textContent || "").trim().toLowerCase();
-        const viewsMatch = text.match(/([\d,]+\.?\d*[KMB]?)\s*(?:views?|plays?)/i);
-        if (viewsMatch) {
-          views = parseCount(viewsMatch[1].replace(/,/g, ""));
-          break;
-        }
-      }
-    }
-
-    return { likes, comments, views };
-  }
-
-  /**
-   * Extracts engagement from a feed-style post (full-size post in the scrolling feed).
-   */
-  function extractFeedEngagement(postEl) {
-    let likes = 0;
-    let comments = 0;
-    let views = 0;
-
-    // Strategy 1: Scan leaf elements for engagement text patterns
-    const allLinks = postEl.querySelectorAll("a, button, span, div");
-    for (const el of allLinks) {
-      const text = (el.textContent || "").trim();
-
-      if (el.children.length > 5) continue;
-
-      if (likes === 0) {
-        const likesMatch = text.match(/([\d,]+\.?\d*[KMB]?)\s*likes?/i);
-        if (likesMatch) {
-          likes = Math.max(likes, parseCount(likesMatch[1].replace(/,/g, "")));
-        }
-        const othersMatch = text.match(/and\s+([\d,]+\.?\d*[KMB]?)\s*others?/i);
-        if (othersMatch) {
-          likes = Math.max(likes, parseCount(othersMatch[1].replace(/,/g, "")) + 1);
-        }
-        if (text.toLowerCase().includes("liked by") && likes === 0) {
-          const ariaLabel = el.getAttribute("aria-label") || "";
-          const countMatch = ariaLabel.match(/([\d,]+\.?\d*[KMB]?)/);
-          if (countMatch) {
-            likes = Math.max(likes, parseCount(countMatch[1].replace(/,/g, "")));
+      // If no specific element found, look at first numeric span in counts
+      if (reactions === 0) {
+        const spans = socialCounts.querySelectorAll("span");
+        for (const span of spans) {
+          const text = (span.textContent || "").trim();
+          const num = extractFirstNumber(text);
+          if (num > 0 && !text.toLowerCase().includes("comment") && !text.toLowerCase().includes("repost")) {
+            reactions = num;
+            break;
           }
         }
       }
 
-      if (comments === 0) {
-        const commentsMatch = text.match(
-          /(?:View\s+all\s+)?([\d,]+\.?\d*[KMB]?)\s*comments?/i
-        );
-        if (commentsMatch) {
-          comments = Math.max(comments, parseCount(commentsMatch[1].replace(/,/g, "")));
+      // Comments count
+      const commentEls = socialCounts.querySelectorAll(
+        'button[aria-label*="comment"], li[class*="comments"], button[class*="comments"]'
+      );
+      for (const el of commentEls) {
+        const label = el.getAttribute("aria-label") || el.textContent || "";
+        const numMatch = label.match(/([\d,.]+[KMB]?)\s*comment/i);
+        if (numMatch) {
+          comments = parseCount(numMatch[1].replace(/,/g, ""));
+          break;
+        }
+        const fallback = label.match(/([\d,.]+[KMB]?)/);
+        if (fallback && label.toLowerCase().includes("comment")) {
+          comments = parseCount(fallback[1].replace(/,/g, ""));
+          break;
         }
       }
 
-      if (views === 0) {
-        const viewsMatch = text.match(/([\d,]+\.?\d*[KMB]?)\s*views?/i);
-        if (viewsMatch) {
-          views = Math.max(views, parseCount(viewsMatch[1].replace(/,/g, "")));
+      // Reposts count
+      const repostEls = socialCounts.querySelectorAll(
+        'button[aria-label*="repost"], li[class*="reposts"], button[class*="reposts"]'
+      );
+      for (const el of repostEls) {
+        const label = el.getAttribute("aria-label") || el.textContent || "";
+        const numMatch = label.match(/([\d,.]+[KMB]?)\s*repost/i);
+        if (numMatch) {
+          reposts = parseCount(numMatch[1].replace(/,/g, ""));
+          break;
         }
-        const playsMatch = text.match(/([\d,]+\.?\d*[KMB]?)\s*plays?/i);
-        if (playsMatch) {
-          views = Math.max(views, parseCount(playsMatch[1].replace(/,/g, "")));
+        const fallback = label.match(/([\d,.]+[KMB]?)/);
+        if (fallback && label.toLowerCase().includes("repost")) {
+          reposts = parseCount(fallback[1].replace(/,/g, ""));
+          break;
+        }
+      }
+
+      // Fallback: scan all text in social counts for comment/repost patterns
+      if (comments === 0 || reposts === 0) {
+        const allCountEls = socialCounts.querySelectorAll("button, a, span, li");
+        for (const el of allCountEls) {
+          const text = (el.textContent || "").trim();
+          if (comments === 0) {
+            const cm = text.match(/([\d,.]+[KMB]?)\s*comment/i);
+            if (cm) comments = parseCount(cm[1].replace(/,/g, ""));
+          }
+          if (reposts === 0) {
+            const rm = text.match(/([\d,.]+[KMB]?)\s*repost/i);
+            if (rm) reposts = parseCount(rm[1].replace(/,/g, ""));
+          }
         }
       }
     }
 
-    // Strategy 2: aria-labels on interactive elements
-    if (likes === 0 && comments === 0 && views === 0) {
-      const interactiveEls = postEl.querySelectorAll("[aria-label], [title]");
-      for (const el of interactiveEls) {
-        const label = (
-          el.getAttribute("aria-label") ||
-          el.getAttribute("title") ||
-          ""
-        ).toLowerCase();
+    // Strategy 2: Scan all buttons with aria-labels
+    if (reactions === 0 && comments === 0 && reposts === 0) {
+      const buttons = postEl.querySelectorAll("button[aria-label]");
+      for (const btn of buttons) {
+        const label = (btn.getAttribute("aria-label") || "").toLowerCase();
 
-        if (label.includes("like") && !label.includes("unlike")) {
-          const m = label.match(/([\d,]+\.?\d*[KMB]?)/i);
-          if (m) likes = Math.max(likes, parseCount(m[1].replace(/,/g, "")));
+        if (
+          (label.includes("reaction") || label.includes("like")) &&
+          !label.includes("unlike")
+        ) {
+          const m = label.match(/([\d,.]+[KMB]?)/i);
+          if (m) reactions = Math.max(reactions, parseCount(m[1].replace(/,/g, "")));
         }
         if (label.includes("comment")) {
-          const m = label.match(/([\d,]+\.?\d*[KMB]?)/i);
+          const m = label.match(/([\d,.]+[KMB]?)/i);
           if (m) comments = Math.max(comments, parseCount(m[1].replace(/,/g, "")));
         }
-        if (label.includes("view") || label.includes("play")) {
-          const m = label.match(/([\d,]+\.?\d*[KMB]?)/i);
-          if (m) views = Math.max(views, parseCount(m[1].replace(/,/g, "")));
+        if (label.includes("repost") || label.includes("share")) {
+          const m = label.match(/([\d,.]+[KMB]?)/i);
+          if (m) reposts = Math.max(reposts, parseCount(m[1].replace(/,/g, "")));
         }
       }
     }
 
-    // Strategy 3: section-based fallback
-    if (likes === 0) {
-      const sections = postEl.querySelectorAll("section");
-      for (const section of sections) {
-        const text = (section.textContent || "").trim();
-        const likesMatch = text.match(/([\d,]+\.?\d*[KMB]?)\s*likes?/i);
-        if (likesMatch) {
-          likes = parseCount(likesMatch[1].replace(/,/g, ""));
-          break;
+    // Strategy 3: Broad text scan for engagement patterns
+    if (reactions === 0 && comments === 0 && reposts === 0) {
+      const textNodes = postEl.querySelectorAll("span, button, a");
+      for (const node of textNodes) {
+        if (node.children.length > 5) continue;
+        const text = (node.textContent || "").trim();
+        if (text.length > 100) continue;
+
+        if (reactions === 0) {
+          const rm = text.match(/([\d,.]+[KMB]?)\s*(?:reactions?|likes?)/i);
+          if (rm) reactions = parseCount(rm[1].replace(/,/g, ""));
         }
-        const othersMatch = text.match(/and\s+([\d,]+\.?\d*[KMB]?)\s*others?/i);
-        if (othersMatch) {
-          likes = parseCount(othersMatch[1].replace(/,/g, "")) + 1;
-          break;
+        if (comments === 0) {
+          const cm = text.match(/([\d,.]+[KMB]?)\s*comments?/i);
+          if (cm) comments = parseCount(cm[1].replace(/,/g, ""));
+        }
+        if (reposts === 0) {
+          const rp = text.match(/([\d,.]+[KMB]?)\s*reposts?/i);
+          if (rp) reposts = parseCount(rp[1].replace(/,/g, ""));
         }
       }
     }
 
-    // Strategy 4: Count visible comment elements
-    if (comments === 0) {
-      const commentEls = postEl.querySelectorAll('ul > li, [role="button"]');
-      let commentCount = 0;
-      for (const el of commentEls) {
-        const text = (el.textContent || "").trim();
-        if (
-          text.length > 5 &&
-          text.length < 2000 &&
-          !text.includes("like") &&
-          !text.includes("view")
-        ) {
-          if (el.querySelector("a") && el.textContent.length > 10) {
-            commentCount++;
+    // Strategy 4: Look for the reactions count near emoji images
+    if (reactions === 0) {
+      const imgs = postEl.querySelectorAll(
+        'img[class*="reactions-icon"], img[src*="reactions"], img[alt*="reaction"]'
+      );
+      for (const img of imgs) {
+        const parent = img.parentElement;
+        if (parent) {
+          const text = (parent.textContent || "").trim();
+          const num = extractFirstNumber(text);
+          if (num > 0) {
+            reactions = num;
+            break;
+          }
+          // Check siblings
+          const sibling = parent.nextElementSibling || parent.parentElement;
+          if (sibling) {
+            const sibText = (sibling.textContent || "").trim();
+            const sibNum = extractFirstNumber(sibText);
+            if (sibNum > 0) {
+              reactions = sibNum;
+              break;
+            }
           }
         }
       }
-      if (commentCount > 0) comments = commentCount;
     }
 
-    return { likes, comments, views };
+    return { reactions, comments, reposts };
   }
 
-  // ─── Post Metadata Extraction ────────────────────────────────────────
+  // ─── Date Extraction ────────────────────────────────────────────────
+
+  /**
+   * Extracts the post date from <time> elements or relative time text.
+   * Returns a Date object or null.
+   */
+  function extractPostDate(postEl) {
+    // Strategy 1: <time> element with datetime attribute
+    const timeEl = postEl.querySelector("time[datetime]");
+    if (timeEl) {
+      const dt = timeEl.getAttribute("datetime");
+      if (dt) {
+        const date = new Date(dt);
+        if (!isNaN(date.getTime())) return date;
+      }
+    }
+
+    // Strategy 2: <time> element text content (relative time)
+    const timeEls = postEl.querySelectorAll("time");
+    for (const t of timeEls) {
+      const text = (t.textContent || "").trim().toLowerCase();
+      const parsed = parseRelativeTime(text);
+      if (parsed) return parsed;
+    }
+
+    // Strategy 3: Scan for relative time patterns in actor description
+    const descEls = postEl.querySelectorAll(
+      '.feed-shared-actor__sub-description, [class*="actor__sub-description"], span[class*="update-components-actor"]'
+    );
+    for (const el of descEls) {
+      const text = (el.textContent || "").trim().toLowerCase();
+      const parsed = parseRelativeTime(text);
+      if (parsed) return parsed;
+    }
+
+    // Strategy 4: Broader scan for time patterns
+    const spans = postEl.querySelectorAll("span");
+    for (const span of spans) {
+      const text = (span.textContent || "").trim();
+      if (text.length > 20 || text.length < 2) continue;
+      const parsed = parseRelativeTime(text.toLowerCase());
+      if (parsed) return parsed;
+    }
+
+    return null;
+  }
+
+  /**
+   * Parses LinkedIn's relative time strings into Date objects.
+   * Handles: "2d", "1w", "3mo", "1yr", "5h", "30m", "Just now", "2d ago", etc.
+   */
+  function parseRelativeTime(text) {
+    if (!text) return null;
+    text = text.trim().toLowerCase().replace("ago", "").replace("edited", "").replace("•", "").trim();
+
+    if (text === "now" || text === "just now") return new Date();
+
+    const now = new Date();
+    let match;
+
+    // Minutes
+    match = text.match(/^(\d+)\s*m(?:in)?s?$/);
+    if (match) return new Date(now.getTime() - parseInt(match[1]) * 60 * 1000);
+
+    // Hours
+    match = text.match(/^(\d+)\s*h(?:r|our)?s?$/);
+    if (match) return new Date(now.getTime() - parseInt(match[1]) * 3600 * 1000);
+
+    // Days
+    match = text.match(/^(\d+)\s*d(?:ay)?s?$/);
+    if (match) return new Date(now.getTime() - parseInt(match[1]) * 86400 * 1000);
+
+    // Weeks
+    match = text.match(/^(\d+)\s*w(?:eek|k)?s?$/);
+    if (match) return new Date(now.getTime() - parseInt(match[1]) * 7 * 86400 * 1000);
+
+    // Months
+    match = text.match(/^(\d+)\s*mo(?:nth)?s?$/);
+    if (match) return new Date(now.getTime() - parseInt(match[1]) * 30 * 86400 * 1000);
+
+    // Years
+    match = text.match(/^(\d+)\s*y(?:r|ear)?s?$/);
+    if (match) return new Date(now.getTime() - parseInt(match[1]) * 365 * 86400 * 1000);
+
+    return null;
+  }
+
+  // ─── Post Metadata Extraction ───────────────────────────────────────
 
   function extractPostMeta(postInfo) {
-    if (postInfo.type === "grid") {
-      return extractGridMeta(postInfo);
-    }
-    return extractFeedMeta(postInfo.element);
-  }
-
-  /**
-   * Extracts metadata from a grid post cell.
-   * Username comes from the page URL, post link from the grid cell's link.
-   */
-  function extractGridMeta(postInfo) {
-    const el = postInfo.element;
-    const linkEl = postInfo.linkElement || el;
+    const postEl = postInfo.element;
     let username = "";
+    let displayName = "";
     let postUrl = "";
     let caption = "";
+    let date = null;
 
-    // Username from page URL (we're on their profile)
-    const pathMatch = window.location.pathname.match(/^\/([A-Za-z0-9_.]+)/);
-    if (pathMatch) {
-      username = pathMatch[1];
-    }
-
-    // Post URL from the link
-    const href =
-      (linkEl.tagName === "A" && linkEl.getAttribute("href")) ||
-      "";
-    if (href) {
-      postUrl = href.startsWith("http")
-        ? href
-        : "https://www.instagram.com" + href;
-    }
-    if (!postUrl) {
-      const innerLink = el.querySelector('a[href*="/p/"], a[href*="/reel/"]');
-      if (innerLink) {
-        const h = innerLink.getAttribute("href") || "";
-        postUrl = h.startsWith("http")
-          ? h
-          : "https://www.instagram.com" + h;
-      }
-    }
-
-    // Caption from img alt text (Instagram puts captions there)
-    const img = el.querySelector("img[alt]");
-    if (img) {
-      const alt = (img.getAttribute("alt") || "").trim();
-      // Instagram img alt is often the caption or a description
-      if (alt.length > 10 && !alt.startsWith("Photo by") && !alt.startsWith("Photo shared")) {
-        caption = alt.length > 150 ? alt.substring(0, 147) + "..." : alt;
-      } else if (alt.length > 10) {
-        // "Photo by X on Date. May be image of..." — still useful
-        caption = alt.length > 150 ? alt.substring(0, 147) + "..." : alt;
-      }
-    }
-
-    return { username, postUrl, caption };
-  }
-
-  /**
-   * Extracts metadata from a feed-style post.
-   */
-  function extractFeedMeta(postEl) {
-    let username = "";
-    let postUrl = "";
-    let caption = "";
-
-    // Username from header links
-    const headerLinks = postEl.querySelectorAll(
-      'header a[href], a[role="link"]'
+    // ── Username / Display Name ──
+    // Strategy 1: Actor name element
+    const actorEl = postEl.querySelector(
+      '.feed-shared-actor__name, [class*="actor__name"], .update-components-actor__name'
     );
-    for (const link of headerLinks) {
+    if (actorEl) {
+      displayName = (actorEl.textContent || "").trim().replace(/\s+/g, " ");
+    }
+
+    // Strategy 2: Profile link
+    const profileLinks = postEl.querySelectorAll('a[href*="/in/"]');
+    for (const link of profileLinks) {
       const href = link.getAttribute("href") || "";
-      const userMatch = href.match(/^\/([A-Za-z0-9_.]+)\/?$/);
+      const userMatch = href.match(/\/in\/([A-Za-z0-9_-]+)/);
       if (userMatch) {
         username = userMatch[1];
+        if (!displayName) {
+          displayName = (link.textContent || "").trim().replace(/\s+/g, " ");
+        }
         break;
       }
     }
 
+    // Strategy 3: Company page link
     if (!username) {
-      const allLinks = postEl.querySelectorAll("a[href]");
-      for (const link of allLinks) {
+      const companyLinks = postEl.querySelectorAll('a[href*="/company/"]');
+      for (const link of companyLinks) {
         const href = link.getAttribute("href") || "";
-        const userMatch = href.match(/^\/([A-Za-z0-9_.]+)\/?$/);
-        if (
-          userMatch &&
-          ![
-            "p", "reel", "explore", "stories", "accounts", "directory",
-          ].includes(userMatch[1])
-        ) {
-          username = userMatch[1];
+        const compMatch = href.match(/\/company\/([A-Za-z0-9_-]+)/);
+        if (compMatch) {
+          username = compMatch[1];
+          if (!displayName) {
+            displayName = (link.textContent || "").trim().replace(/\s+/g, " ");
+          }
           break;
         }
       }
     }
 
-    // Post URL
-    const postLinks = postEl.querySelectorAll(
-      'a[href*="/p/"], a[href*="/reel/"]'
-    );
-    for (const link of postLinks) {
-      const href = link.getAttribute("href") || "";
-      if (href.includes("/p/") || href.includes("/reel/")) {
-        postUrl = href.startsWith("http")
-          ? href
-          : "https://www.instagram.com" + href;
-        break;
+    // On activity pages, the profile owner is the author
+    if (!username) {
+      const pageType = getPageType();
+      if (pageType === "activity" || pageType === "profile") {
+        const pathMatch = window.location.pathname.match(/\/in\/([A-Za-z0-9_-]+)/);
+        if (pathMatch) username = pathMatch[1];
       }
     }
 
+    // ── Post URL ──
+    // Strategy 1: data-urn attribute → construct URL
+    const urn = postEl.getAttribute("data-urn") || postEl.getAttribute("data-id") || "";
+    if (urn && urn.includes("urn:li:")) {
+      postUrl = "https://www.linkedin.com/feed/update/" + urn;
+    }
+
+    // Strategy 2: Timestamp link
     if (!postUrl) {
-      const timeEl = postEl.querySelector("time");
-      if (timeEl) {
-        const parentLink = timeEl.closest("a[href]");
+      const timeLink = postEl.querySelector("time");
+      if (timeLink) {
+        const parentLink = timeLink.closest("a[href]");
         if (parentLink) {
           const href = parentLink.getAttribute("href") || "";
           postUrl = href.startsWith("http")
             ? href
-            : "https://www.instagram.com" + href;
+            : "https://www.linkedin.com" + href;
         }
       }
     }
 
-    // Caption
-    const captionCandidates = postEl.querySelectorAll("span, div");
-    for (const el of captionCandidates) {
-      const text = (el.textContent || "").trim();
-      if (text.length < 20) continue;
-      if (/^\d+\s*(likes?|comments?|views?|plays?)/i.test(text)) continue;
-      if (/^(View all|Liked by|Load more)/i.test(text)) continue;
-      if (el.closest("header")) continue;
-      if (el.children.length > 3) continue;
-      caption = text.length > 150 ? text.substring(0, 147) + "..." : text;
-      break;
+    // Strategy 3: Any permalink-like link
+    if (!postUrl) {
+      const postLinks = postEl.querySelectorAll(
+        'a[href*="/feed/update/"], a[href*="/posts/"]'
+      );
+      for (const link of postLinks) {
+        const href = link.getAttribute("href") || "";
+        postUrl = href.startsWith("http")
+          ? href
+          : "https://www.linkedin.com" + href;
+        break;
+      }
     }
 
-    return { username, postUrl, caption };
+    // ── Caption / Post Text ──
+    const textEl = postEl.querySelector(
+      '.update-components-text, .feed-shared-text, [class*="update-components-text"]'
+    );
+    if (textEl) {
+      caption = (textEl.textContent || "").trim().replace(/\s+/g, " ");
+      if (caption.length > 200) caption = caption.substring(0, 197) + "...";
+    }
+
+    if (!caption) {
+      const dirSpans = postEl.querySelectorAll('span[dir="ltr"], span[dir="auto"]');
+      for (const span of dirSpans) {
+        const text = (span.textContent || "").trim();
+        if (text.length > 20 && text.length < 2000) {
+          caption = text.length > 200 ? text.substring(0, 197) + "..." : text;
+          break;
+        }
+      }
+    }
+
+    // ── Date ──
+    date = extractPostDate(postEl);
+
+    return {
+      username: username || displayName || "",
+      postUrl,
+      caption,
+      date,
+    };
   }
 
-  // ─── Scoring ─────────────────────────────────────────────────────────
+  // ─── Scoring ────────────────────────────────────────────────────────
 
   function calculateScore(engagement) {
     return (
-      engagement.likes * weights.likes +
+      engagement.reactions * weights.reactions +
       engagement.comments * weights.comments +
-      engagement.views * weights.views
+      engagement.reposts * weights.reposts
     );
   }
 
-  // ─── Highlighting ────────────────────────────────────────────────────
+  // ─── Highlighting ───────────────────────────────────────────────────
 
   function clearHighlights() {
     document
-      .querySelectorAll(".ieh-tier1, .ieh-tier2")
-      .forEach((el) => {
-        el.classList.remove("ieh-tier1", "ieh-tier2");
-      });
+      .querySelectorAll(".leh-tier1, .leh-tier2")
+      .forEach((el) => el.classList.remove("leh-tier1", "leh-tier2"));
     document
-      .querySelectorAll(".ieh-score-badge")
+      .querySelectorAll(".leh-score-badge")
       .forEach((el) => el.remove());
   }
 
@@ -606,88 +623,109 @@
       const medianThreshold = sorted[medianIndex]?.score ?? 0;
 
       for (const item of scoredPosts) {
-        item.element.classList.remove("ieh-tier1", "ieh-tier2");
+        item.element.classList.remove("leh-tier1", "leh-tier2");
         if (item.score >= top10Threshold && item.score > 0) {
-          item.element.classList.add("ieh-tier1");
+          item.element.classList.add("leh-tier1");
         } else if (item.score >= medianThreshold && item.score > 0) {
-          item.element.classList.add("ieh-tier2");
+          item.element.classList.add("leh-tier2");
         }
         if (showScores) addScoreBadge(item, scoredPosts);
       }
     } else {
       for (const item of scoredPosts) {
-        item.element.classList.remove("ieh-tier1", "ieh-tier2");
+        item.element.classList.remove("leh-tier1", "leh-tier2");
         if (item.score >= absoluteThreshold * 2) {
-          item.element.classList.add("ieh-tier1");
+          item.element.classList.add("leh-tier1");
         } else if (item.score >= absoluteThreshold) {
-          item.element.classList.add("ieh-tier2");
+          item.element.classList.add("leh-tier2");
         }
         if (showScores) addScoreBadge(item, scoredPosts);
       }
     }
   }
 
-  function formatCount(n) {
-    if (n >= 1_000_000)
-      return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
-    if (n >= 1_000)
-      return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
-    return String(n);
-  }
-
   /**
-   * Assigns a color tier based on percentile rank.
-   * Returns: "gold", "green", "blue", or "gray"
+   * 4-tier color system: gold (top 10%), green (top 30%), blue (top 60%), gray (rest)
    */
   function getScoreColor(item, allScored) {
     if (item.score === 0) return "gray";
     const rank = allScored.filter((s) => s.score > item.score).length;
     const pct = rank / allScored.length;
-    if (pct < 0.1) return "gold";   // top 10%
-    if (pct < 0.3) return "green";  // top 30%
-    if (pct < 0.6) return "blue";   // top 60%
-    return "gray";                   // bottom 40%
+    if (pct < 0.1) return "gold";
+    if (pct < 0.3) return "green";
+    if (pct < 0.6) return "blue";
+    return "gray";
   }
 
   function addScoreBadge(item, allScored) {
-    const existing = item.element.querySelector(".ieh-score-badge");
+    const existing = item.element.querySelector(".leh-score-badge");
     if (existing) existing.remove();
-
     if (!showScores) return;
 
     const badge = document.createElement("div");
     const colorTier = allScored ? getScoreColor(item, allScored) : "gray";
-    badge.className =
-      "ieh-score-badge" +
-      (item.type === "grid" ? " ieh-grid-badge" : "") +
-      " ieh-color-" + colorTier;
+    badge.className = "leh-score-badge leh-color-" + colorTier;
 
     const parts = [];
-    if (item.engagement.likes > 0)
-      parts.push(`\u2764\ufe0f ${formatCount(item.engagement.likes)}`);
+    if (item.engagement.reactions > 0)
+      parts.push("\ud83d\udc4d " + formatCount(item.engagement.reactions));
     if (item.engagement.comments > 0)
-      parts.push(`\ud83d\udcac ${formatCount(item.engagement.comments)}`);
-    if (item.engagement.views > 0)
-      parts.push(`\ud83d\udc41 ${formatCount(item.engagement.views)}`);
+      parts.push("\ud83d\udcac " + formatCount(item.engagement.comments));
+    if (item.engagement.reposts > 0)
+      parts.push("\ud83d\udd01 " + formatCount(item.engagement.reposts));
 
     const breakdown = parts.length > 0 ? parts.join("  ") : "no data";
-
-    badge.innerHTML = `<span class="ieh-badge-score">${item.score.toLocaleString()}</span><span class="ieh-badge-detail">${breakdown}</span>`;
+    badge.innerHTML =
+      '<span class="leh-badge-score">' +
+      item.score.toLocaleString() +
+      '</span><span class="leh-badge-detail">' +
+      breakdown +
+      "</span>";
 
     const computedStyle = window.getComputedStyle(item.element);
     if (computedStyle.position === "static") {
       item.element.style.position = "relative";
     }
-    if (item.type === "grid") {
-      item.element.style.overflow = "visible";
-    }
 
     item.element.appendChild(badge);
   }
 
-  // ─── Main Processing ─────────────────────────────────────────────────
+  // ─── Date Filtering ─────────────────────────────────────────────────
 
-  let lastScoredPosts = [];
+  function isPostInDateRange(date) {
+    if (dateFilter === "all" || !date) return true;
+
+    const now = new Date();
+    let cutoff;
+
+    switch (dateFilter) {
+      case "24h":
+        cutoff = new Date(now.getTime() - 24 * 3600 * 1000);
+        break;
+      case "7d":
+        cutoff = new Date(now.getTime() - 7 * 86400 * 1000);
+        break;
+      case "30d":
+        cutoff = new Date(now.getTime() - 30 * 86400 * 1000);
+        break;
+      case "90d":
+        cutoff = new Date(now.getTime() - 90 * 86400 * 1000);
+        break;
+      case "custom": {
+        const from = customDateFrom ? new Date(customDateFrom) : null;
+        const to = customDateTo ? new Date(customDateTo + "T23:59:59") : null;
+        if (from && date < from) return false;
+        if (to && date > to) return false;
+        return true;
+      }
+      default:
+        return true;
+    }
+
+    return date >= cutoff;
+  }
+
+  // ─── Main Processing ────────────────────────────────────────────────
 
   function processAllPosts(forceRefresh) {
     if (!enabled) {
@@ -697,37 +735,65 @@
 
     const posts = findAllPosts();
     let hasNew = false;
-    const scoredPosts = [];
+    const allScored = [];
 
     for (const postInfo of posts) {
-      // Use cache unless forced refresh
       const cached = !forceRefresh && scoredCache.get(postInfo.element);
       if (cached) {
-        scoredPosts.push(cached);
+        allScored.push(cached);
         continue;
       }
 
       hasNew = true;
       const engagement = extractEngagement(postInfo);
       const score = calculateScore(engagement);
+      const date = extractPostDate(postInfo.element);
       const entry = {
         element: postInfo.element,
         type: postInfo.type,
         score,
         engagement,
+        date,
       };
       scoredCache.set(postInfo.element, entry);
-      scoredPosts.push(entry);
+      allScored.push(entry);
     }
 
-    // If nothing changed and not forced, skip the expensive DOM update
-    if (!hasNew && !forceRefresh && lastScoredPosts.length === scoredPosts.length) {
+    if (!hasNew && !forceRefresh && lastScoredPosts.length === allScored.length) {
       return;
     }
 
-    lastScoredPosts = scoredPosts;
+    // Apply date filter
+    const filtered = allScored.filter((item) => isPostInDateRange(item.date));
+
+    // Dim posts that are outside the date range (but don't remove badges from them)
+    for (const item of allScored) {
+      if (!filtered.includes(item)) {
+        item.element.classList.remove("leh-tier1", "leh-tier2");
+        const existingBadge = item.element.querySelector(".leh-score-badge");
+        if (existingBadge) existingBadge.remove();
+        item.element.style.opacity = dateFilter === "all" ? "" : "0.4";
+      } else {
+        item.element.style.opacity = "";
+      }
+    }
+
+    lastScoredPosts = allScored;
     clearHighlights();
-    applyHighlights(scoredPosts);
+    applyHighlights(filtered);
+    updateFilteredCount(filtered.length, allScored.length);
+  }
+
+  function updateFilteredCount(shown, total) {
+    const el = document.getElementById("leh-filter-count");
+    if (!el) return;
+    if (dateFilter === "all") {
+      el.textContent = "";
+      el.style.display = "none";
+    } else {
+      el.textContent = shown + " of " + total + " posts match filter";
+      el.style.display = "block";
+    }
   }
 
   function debouncedProcess() {
@@ -735,12 +801,13 @@
     debounceTimer = setTimeout(processAllPosts, DEBOUNCE_MS);
   }
 
-  // ─── MutationObserver ────────────────────────────────────────────────
+  // ─── MutationObserver ───────────────────────────────────────────────
 
   function setupObserver() {
     const feedContainer =
-      document.querySelector('main[role="main"]') ||
       document.querySelector("main") ||
+      document.querySelector(".scaffold-layout__main") ||
+      document.querySelector(".scaffold-finite-scroll__content") ||
       document.body;
 
     const observer = new MutationObserver((mutations) => {
@@ -751,64 +818,70 @@
           break;
         }
       }
-      if (hasNewContent) {
-        debouncedProcess();
-      }
+      if (hasNewContent) debouncedProcess();
     });
 
-    observer.observe(feedContainer, {
-      childList: true,
-      subtree: true,
-    });
-
+    observer.observe(feedContainer, { childList: true, subtree: true });
     return observer;
   }
 
-  // ─── SPA Navigation Handling ─────────────────────────────────────────
+  // ─── SPA Navigation ────────────────────────────────────────────────
 
-  /**
-   * Instagram is a SPA — page changes don't reload the content script.
-   * We listen for URL changes and re-process when the user navigates
-   * between feed, profiles, and posts.
-   */
   let lastUrl = window.location.href;
 
   function setupNavigationListener() {
-    // Poll for URL changes (pushState/replaceState don't fire events reliably)
     setInterval(() => {
       if (window.location.href !== lastUrl) {
         lastUrl = window.location.href;
-        // Delay to let Instagram render the new page
         setTimeout(() => {
-          processAllPosts();
+          processAllPosts(true);
           updateExtractCount();
+          updatePageIndicator();
         }, 1500);
       }
     }, 500);
   }
 
-  // ─── Auto-scroll ─────────────────────────────────────────────────────
+  // ─── Auto-scroll ───────────────────────────────────────────────────
 
   function startAutoScroll() {
     if (autoScrollRafId) return;
     lastScrollTime = performance.now();
+    showMoreHandled = false;
 
     function scrollStep(now) {
       if (!autoScrollEnabled) {
         autoScrollRafId = null;
         return;
       }
+
       const delta = now - lastScrollTime;
       lastScrollTime = now;
       const pxPerSec = SCROLL_SPEEDS[Math.min(autoScrollSpeed - 1, 5)] || 1200;
       const px = (pxPerSec * delta) / 1000;
-      // Add subtle variance so it doesn't look robotic
       const variance = 1 + Math.sin(now / 800) * 0.15;
       window.scrollBy({ top: px * variance, behavior: "instant" });
+
+      // Check for bottom / show more
+      const atBottom =
+        window.innerHeight + window.scrollY >= document.body.scrollHeight - 150;
+      if (atBottom && !showMoreHandled) {
+        handleShowMore();
+      }
+
       autoScrollRafId = requestAnimationFrame(scrollStep);
     }
 
     autoScrollRafId = requestAnimationFrame(scrollStep);
+
+    // Periodically check for show-more buttons mid-feed
+    if (!autoScrollEnabled._pollId) {
+      autoScrollEnabled._pollId = setInterval(() => {
+        if (!autoScrollEnabled) return;
+        const btn = findShowMoreButton();
+        if (btn && !showMoreHandled) handleShowMore();
+      }, 3000);
+    }
   }
 
   function stopAutoScroll() {
@@ -816,121 +889,245 @@
       cancelAnimationFrame(autoScrollRafId);
       autoScrollRafId = null;
     }
+    if (autoScrollEnabled._pollId) {
+      clearInterval(autoScrollEnabled._pollId);
+      autoScrollEnabled._pollId = null;
+    }
   }
 
-  // ─── Control Panel ───────────────────────────────────────────────────
+  function findShowMoreButton() {
+    const candidates = Array.from(
+      document.querySelectorAll('button, a[role="button"]')
+    );
+    for (const el of candidates) {
+      const text = (el.textContent || "").trim().toLowerCase();
+      if (
+        text.includes("show more") ||
+        text.includes("load more") ||
+        text.includes("see more activity") ||
+        text.includes("show more results")
+      ) {
+        return el;
+      }
+    }
+    return null;
+  }
+
+  function handleShowMore() {
+    const btn = findShowMoreButton();
+    if (!btn || showMoreHandled) return;
+
+    showMoreHandled = true;
+    btn.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    setTimeout(() => {
+      if (!autoScrollEnabled) return;
+      btn.click();
+      setTimeout(() => {
+        showMoreHandled = false;
+      }, 2000);
+    }, 1200);
+  }
+
+  // ─── Control Panel ─────────────────────────────────────────────────
 
   function createControlPanel() {
-    if (document.getElementById("ieh-panel")) return;
+    if (document.getElementById("leh-panel")) return;
 
     const panel = document.createElement("div");
-    panel.id = "ieh-panel";
+    panel.id = "leh-panel";
     panel.innerHTML = `
-      <div class="ieh-panel-header">
-        <span class="ieh-panel-title">IG Engagement Highlighter</span>
-        <button class="ieh-panel-toggle-collapse" title="Minimize">&#x2212;</button>
+      <div class="leh-panel-header">
+        <div class="leh-header-left">
+          <svg class="leh-logo" width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" fill="currentColor"/>
+          </svg>
+          <span class="leh-panel-title">Engagement Highlighter</span>
+        </div>
+        <button class="leh-panel-collapse" title="Minimize">\u2212</button>
       </div>
-      <div class="ieh-panel-body">
+      <div class="leh-panel-body">
+        <div id="leh-page-type" class="leh-page-indicator">Feed</div>
 
-        <div id="ieh-page-type" class="ieh-page-indicator"></div>
-
-        <!-- Highlighter section -->
-        <div class="ieh-control-row">
-          <label class="ieh-label">
-            <input type="checkbox" id="ieh-enabled" checked />
-            Highlight posts
-          </label>
-        </div>
-        <div class="ieh-control-row">
-          <label class="ieh-label">
-            <input type="checkbox" id="ieh-show-scores" checked />
-            Show score badge
-          </label>
-        </div>
-        <div class="ieh-control-row">
-          <label class="ieh-label">Mode:</label>
-          <select id="ieh-mode">
-            <option value="percentile">Percentile (auto)</option>
-            <option value="threshold">Fixed threshold</option>
-          </select>
-        </div>
-        <div class="ieh-control-row ieh-threshold-row" style="display:none;">
-          <label class="ieh-label">Threshold:</label>
-          <input type="range" id="ieh-threshold" min="10" max="5000" value="100" step="10" />
-          <span id="ieh-threshold-val">100</span>
-        </div>
-
-        <div class="ieh-section-label">Score weights</div>
-        <div class="ieh-weight-help">Higher = counts more toward score</div>
-        <div class="ieh-control-row">
-          <label class="ieh-label">\u2764\ufe0f Likes</label>
-          <input type="number" id="ieh-w-likes" value="5" min="0" max="20" step="1" class="ieh-num-input" />
-        </div>
-        <div class="ieh-control-row">
-          <label class="ieh-label">\ud83d\udcac Comments</label>
-          <input type="number" id="ieh-w-comments" value="10" min="0" max="20" step="1" class="ieh-num-input" />
-        </div>
-        <div class="ieh-control-row">
-          <label class="ieh-label">\ud83d\udc41 Views</label>
-          <input type="number" id="ieh-w-views" value="2" min="0" max="20" step="1" class="ieh-num-input" />
-        </div>
-        <button id="ieh-recalculate" class="ieh-btn">Recalculate</button>
-
-        <!-- Auto-scroll section -->
-        <div class="ieh-section-label">Auto-scroll</div>
-        <div class="ieh-control-row">
-          <label class="ieh-label">
-            <input type="checkbox" id="ieh-autoscroll" />
-            Scroll feed automatically
-          </label>
-        </div>
-        <div class="ieh-control-row">
-          <label class="ieh-label">Speed:</label>
-          <input type="range" id="ieh-scroll-speed" min="1" max="6" value="3" step="1" />
-          <span id="ieh-scroll-speed-val">3</span>
-        </div>
-        <div class="ieh-scroll-note">
-          Smoothly scrolls through your feed. Speed 1 = gentle, 6 = turbo.
+        <!-- Section: Highlighter -->
+        <div class="leh-section">
+          <div class="leh-section-header" data-section="highlighter">
+            <span>Highlighter</span>
+            <span class="leh-chevron">\u25BE</span>
+          </div>
+          <div class="leh-section-body">
+            <div class="leh-control-row">
+              <span class="leh-label-text">Highlight posts</span>
+              <label class="leh-toggle">
+                <input type="checkbox" id="leh-enabled" checked />
+                <span class="leh-toggle-slider"></span>
+              </label>
+            </div>
+            <div class="leh-control-row">
+              <span class="leh-label-text">Score badges</span>
+              <label class="leh-toggle">
+                <input type="checkbox" id="leh-show-scores" checked />
+                <span class="leh-toggle-slider"></span>
+              </label>
+            </div>
+            <div class="leh-control-row">
+              <span class="leh-label-text">Mode</span>
+              <select id="leh-mode" class="leh-select">
+                <option value="percentile">Percentile (auto)</option>
+                <option value="threshold">Fixed threshold</option>
+              </select>
+            </div>
+            <div class="leh-control-row leh-threshold-row" style="display:none;">
+              <span class="leh-label-text">Threshold</span>
+              <input type="range" id="leh-threshold" min="10" max="5000" value="100" step="10" class="leh-range" />
+              <span id="leh-threshold-val" class="leh-range-val">100</span>
+            </div>
+          </div>
         </div>
 
-        <!-- Extract top posts section -->
-        <div class="ieh-section-label">Extract top posts</div>
-        <div class="ieh-control-row">
-          <label class="ieh-label">Show top:</label>
-          <select id="ieh-export-count">
-            <option value="5">5 posts</option>
-            <option value="10" selected>10 posts</option>
-            <option value="25">25 posts</option>
-            <option value="50">50 posts</option>
-            <option value="all">All scored</option>
-          </select>
+        <!-- Section: Score Weights -->
+        <div class="leh-section">
+          <div class="leh-section-header" data-section="weights">
+            <span>Score Weights</span>
+            <span class="leh-chevron">\u25BE</span>
+          </div>
+          <div class="leh-section-body">
+            <div class="leh-help-text">Higher = counts more toward score</div>
+            <div class="leh-control-row">
+              <span class="leh-label-text">\ud83d\udc4d Reactions</span>
+              <input type="number" id="leh-w-reactions" value="5" min="0" max="20" step="1" class="leh-num-input" />
+            </div>
+            <div class="leh-control-row">
+              <span class="leh-label-text">\ud83d\udcac Comments</span>
+              <input type="number" id="leh-w-comments" value="10" min="0" max="20" step="1" class="leh-num-input" />
+            </div>
+            <div class="leh-control-row">
+              <span class="leh-label-text">\ud83d\udd01 Reposts</span>
+              <input type="number" id="leh-w-reposts" value="2" min="0" max="20" step="1" class="leh-num-input" />
+            </div>
+            <button id="leh-recalculate" class="leh-btn leh-btn-secondary">Recalculate</button>
+          </div>
         </div>
-        <button id="ieh-extract" class="ieh-btn ieh-btn-extract">Extract Top Posts</button>
-        <div id="ieh-extract-count" class="ieh-scroll-note"></div>
+
+        <!-- Section: Date Filter -->
+        <div class="leh-section">
+          <div class="leh-section-header" data-section="datefilter">
+            <span>Date Filter</span>
+            <span class="leh-chevron">\u25BE</span>
+          </div>
+          <div class="leh-section-body">
+            <div class="leh-help-text">Filter posts by when they were published</div>
+            <select id="leh-date-filter" class="leh-select leh-select-full">
+              <option value="all">All time</option>
+              <option value="24h">Last 24 hours</option>
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="90d">Last 90 days</option>
+              <option value="custom">Custom range</option>
+            </select>
+            <div id="leh-date-custom" class="leh-date-custom" style="display:none;">
+              <div class="leh-control-row">
+                <span class="leh-label-text">From</span>
+                <input type="date" id="leh-date-from" class="leh-date-input" />
+              </div>
+              <div class="leh-control-row">
+                <span class="leh-label-text">To</span>
+                <input type="date" id="leh-date-to" class="leh-date-input" />
+              </div>
+            </div>
+            <div id="leh-filter-count" class="leh-filter-count" style="display:none;"></div>
+          </div>
+        </div>
+
+        <!-- Section: Auto-scroll -->
+        <div class="leh-section">
+          <div class="leh-section-header" data-section="autoscroll">
+            <span>Auto-scroll</span>
+            <span class="leh-chevron">\u25BE</span>
+          </div>
+          <div class="leh-section-body">
+            <div class="leh-control-row">
+              <span class="leh-label-text">Enable</span>
+              <label class="leh-toggle">
+                <input type="checkbox" id="leh-autoscroll" />
+                <span class="leh-toggle-slider"></span>
+              </label>
+            </div>
+            <div class="leh-control-row">
+              <span class="leh-label-text">Speed</span>
+              <input type="range" id="leh-scroll-speed" min="1" max="6" value="3" step="1" class="leh-range" />
+              <span id="leh-scroll-speed-val" class="leh-range-val">3</span>
+            </div>
+            <div class="leh-help-text">Smooth scroll with auto-pause on "Show more" prompts. Speed 1 = gentle, 6 = turbo.</div>
+          </div>
+        </div>
+
+        <!-- Section: Extract & Export -->
+        <div class="leh-section">
+          <div class="leh-section-header" data-section="extract">
+            <span>Extract &amp; Export</span>
+            <span class="leh-chevron">\u25BE</span>
+          </div>
+          <div class="leh-section-body">
+            <div class="leh-control-row">
+              <span class="leh-label-text">Show top</span>
+              <select id="leh-export-count" class="leh-select">
+                <option value="5">5 posts</option>
+                <option value="10" selected>10 posts</option>
+                <option value="25">25 posts</option>
+                <option value="50">50 posts</option>
+                <option value="100">100 posts</option>
+                <option value="150">150 posts</option>
+                <option value="all">All scored</option>
+              </select>
+            </div>
+            <button id="leh-extract" class="leh-btn leh-btn-primary">Extract Top Posts</button>
+            <div id="leh-extract-count" class="leh-help-text"></div>
+          </div>
+        </div>
       </div>
     `;
 
     document.body.appendChild(panel);
+    wireUpPanelEvents(panel);
+    updatePageIndicator();
+    updateExtractCount();
+  }
 
-    // ── Collapse toggle ──
+  function wireUpPanelEvents(panel) {
+    // ── Collapse panel ──
     let collapsed = false;
-    const collapseBtn = panel.querySelector(".ieh-panel-toggle-collapse");
-    const panelBody = panel.querySelector(".ieh-panel-body");
+    const collapseBtn = panel.querySelector(".leh-panel-collapse");
+    const panelBody = panel.querySelector(".leh-panel-body");
+
     collapseBtn.addEventListener("click", () => {
       collapsed = !collapsed;
       panelBody.style.display = collapsed ? "none" : "block";
       collapseBtn.textContent = collapsed ? "+" : "\u2212";
-      panel.classList.toggle("ieh-collapsed", collapsed);
+      panel.classList.toggle("leh-collapsed", collapsed);
     });
+
+    // ── Section collapse ──
+    const sectionHeaders = panel.querySelectorAll(".leh-section-header");
+    for (const header of sectionHeaders) {
+      header.addEventListener("click", () => {
+        const body = header.nextElementSibling;
+        const chevron = header.querySelector(".leh-chevron");
+        const isOpen = body.style.display !== "none";
+        body.style.display = isOpen ? "none" : "block";
+        chevron.textContent = isOpen ? "\u25B8" : "\u25BE";
+        header.classList.toggle("leh-section-closed", isOpen);
+      });
+    }
 
     // ── Drag support ──
     let isDragging = false;
     let dragOffsetX = 0;
     let dragOffsetY = 0;
-    const header = panel.querySelector(".ieh-panel-header");
+    const header = panel.querySelector(".leh-panel-header");
 
     header.addEventListener("mousedown", (e) => {
-      if (e.target === collapseBtn) return;
+      if (e.target.closest(".leh-panel-collapse")) return;
       isDragging = true;
       dragOffsetX = e.clientX - panel.getBoundingClientRect().left;
       dragOffsetY = e.clientY - panel.getBoundingClientRect().top;
@@ -949,133 +1146,134 @@
     });
 
     // ── Highlighter controls ──
-    document.getElementById("ieh-enabled").addEventListener("change", (e) => {
+    document.getElementById("leh-enabled").addEventListener("change", (e) => {
       enabled = e.target.checked;
       processAllPosts();
       saveSettings();
     });
 
-    document
-      .getElementById("ieh-show-scores")
-      .addEventListener("change", (e) => {
-        showScores = e.target.checked;
-        processAllPosts();
-        saveSettings();
-      });
+    document.getElementById("leh-show-scores").addEventListener("change", (e) => {
+      showScores = e.target.checked;
+      processAllPosts();
+      saveSettings();
+    });
 
-    document.getElementById("ieh-mode").addEventListener("change", (e) => {
+    document.getElementById("leh-mode").addEventListener("change", (e) => {
       mode = e.target.value;
-      const thresholdRow = panel.querySelector(".ieh-threshold-row");
+      const thresholdRow = panel.querySelector(".leh-threshold-row");
       thresholdRow.style.display = mode === "threshold" ? "flex" : "none";
       processAllPosts(true);
       saveSettings();
     });
 
-    document
-      .getElementById("ieh-threshold")
-      .addEventListener("input", (e) => {
-        absoluteThreshold = parseInt(e.target.value, 10);
-        document.getElementById("ieh-threshold-val").textContent =
-          absoluteThreshold;
-        saveSettings();
-      });
-
-    document
-      .getElementById("ieh-threshold")
-      .addEventListener("change", () => {
-        processAllPosts(true);
-      });
-
-    document
-      .getElementById("ieh-w-likes")
-      .addEventListener("change", (e) => {
-        weights.likes = parseFloat(e.target.value) || 0;
-        processAllPosts(true);
-        saveSettings();
-      });
-
-    document
-      .getElementById("ieh-w-comments")
-      .addEventListener("change", (e) => {
-        weights.comments = parseFloat(e.target.value) || 0;
-        processAllPosts(true);
-        saveSettings();
-      });
-
-    document
-      .getElementById("ieh-w-views")
-      .addEventListener("change", (e) => {
-        weights.views = parseFloat(e.target.value) || 0;
-        processAllPosts(true);
-        saveSettings();
-      });
-
-    document
-      .getElementById("ieh-recalculate")
-      .addEventListener("click", () => {
-        processAllPosts(true);
-      });
-
-    // ── Auto-scroll controls ──
-    document
-      .getElementById("ieh-autoscroll")
-      .addEventListener("change", (e) => {
-        autoScrollEnabled = e.target.checked;
-        if (autoScrollEnabled) {
-          startAutoScroll();
-        } else {
-          stopAutoScroll();
-        }
-        saveSettings();
-      });
-
-    document
-      .getElementById("ieh-scroll-speed")
-      .addEventListener("input", (e) => {
-        autoScrollSpeed = parseInt(e.target.value, 10);
-        document.getElementById("ieh-scroll-speed-val").textContent =
-          autoScrollSpeed;
-        saveSettings();
-      });
-
-    // ── Extract top posts ──
-    document.getElementById("ieh-extract").addEventListener("click", () => {
-      extractTopPosts();
+    document.getElementById("leh-threshold").addEventListener("input", (e) => {
+      absoluteThreshold = parseInt(e.target.value, 10);
+      document.getElementById("leh-threshold-val").textContent = absoluteThreshold;
+      saveSettings();
     });
 
-    updateExtractCount();
-    updatePageIndicator();
+    document.getElementById("leh-threshold").addEventListener("change", () => {
+      processAllPosts(true);
+    });
+
+    // ── Weight controls ──
+    document.getElementById("leh-w-reactions").addEventListener("change", (e) => {
+      weights.reactions = parseFloat(e.target.value) || 0;
+      processAllPosts(true);
+      saveSettings();
+    });
+
+    document.getElementById("leh-w-comments").addEventListener("change", (e) => {
+      weights.comments = parseFloat(e.target.value) || 0;
+      processAllPosts(true);
+      saveSettings();
+    });
+
+    document.getElementById("leh-w-reposts").addEventListener("change", (e) => {
+      weights.reposts = parseFloat(e.target.value) || 0;
+      processAllPosts(true);
+      saveSettings();
+    });
+
+    document.getElementById("leh-recalculate").addEventListener("click", () => {
+      processAllPosts(true);
+    });
+
+    // ── Date filter controls ──
+    document.getElementById("leh-date-filter").addEventListener("change", (e) => {
+      dateFilter = e.target.value;
+      const customSection = document.getElementById("leh-date-custom");
+      customSection.style.display = dateFilter === "custom" ? "block" : "none";
+      processAllPosts(true);
+      saveSettings();
+    });
+
+    document.getElementById("leh-date-from").addEventListener("change", (e) => {
+      customDateFrom = e.target.value;
+      processAllPosts(true);
+      saveSettings();
+    });
+
+    document.getElementById("leh-date-to").addEventListener("change", (e) => {
+      customDateTo = e.target.value;
+      processAllPosts(true);
+      saveSettings();
+    });
+
+    // ── Auto-scroll controls ──
+    document.getElementById("leh-autoscroll").addEventListener("change", (e) => {
+      autoScrollEnabled = e.target.checked;
+      if (autoScrollEnabled) {
+        startAutoScroll();
+      } else {
+        stopAutoScroll();
+      }
+      saveSettings();
+    });
+
+    document.getElementById("leh-scroll-speed").addEventListener("input", (e) => {
+      autoScrollSpeed = parseInt(e.target.value, 10);
+      document.getElementById("leh-scroll-speed-val").textContent = autoScrollSpeed;
+      saveSettings();
+    });
+
+    // ── Extract ──
+    document.getElementById("leh-extract").addEventListener("click", () => {
+      extractTopPosts();
+    });
   }
 
-  // ─── Page Indicator ────────────────────────────────────────────────
+  // ─── Page Indicator ─────────────────────────────────────────────────
 
   function updatePageIndicator() {
-    const el = document.getElementById("ieh-page-type");
+    const el = document.getElementById("leh-page-type");
     if (!el) return;
     const pageType = getPageType();
     const labels = {
-      feed: "Feed view",
-      profile: "Profile grid",
-      post: "Single post",
-      explore: "Explore",
+      feed: "Feed",
+      activity: "Activity",
+      company: "Company",
+      search: "Search",
+      profile: "Profile",
+      post: "Post",
     };
     el.textContent = labels[pageType] || pageType;
   }
 
-  // ─── Extract Top Posts ────────────────────────────────────────────────
+  // ─── Extract & Export ───────────────────────────────────────────────
 
   function updateExtractCount() {
-    const countEl = document.getElementById("ieh-extract-count");
+    const countEl = document.getElementById("leh-extract-count");
     if (!countEl) return;
     const posts = findAllPosts();
     const pageType = getPageType();
-    const label = pageType === "profile" ? "in grid" : "in feed";
+    const label =
+      pageType === "activity" ? "on activity" :
+      pageType === "company" ? "on company" :
+      pageType === "search" ? "in results" :
+      "in feed";
     countEl.textContent =
-      posts.length +
-      " post" +
-      (posts.length !== 1 ? "s" : "") +
-      " detected " +
-      label;
+      posts.length + " post" + (posts.length !== 1 ? "s" : "") + " detected " + label;
   }
 
   function extractTopPosts() {
@@ -1086,89 +1284,106 @@
       const engagement = extractEngagement(postInfo);
       const score = calculateScore(engagement);
       const meta = extractPostMeta(postInfo);
-      scored.push({ ...meta, ...engagement, score });
+
+      // Apply date filter
+      if (!isPostInDateRange(meta.date)) continue;
+
+      scored.push({
+        ...meta,
+        reactions: engagement.reactions,
+        comments: engagement.comments,
+        reposts: engagement.reposts,
+        score,
+      });
     }
 
     scored.sort((a, b) => b.score - a.score);
 
-    const countSel = document.getElementById("ieh-export-count");
+    const countSel = document.getElementById("leh-export-count");
     const countVal = countSel ? countSel.value : "10";
-    const limit =
-      countVal === "all" ? scored.length : parseInt(countVal, 10);
+    const limit = countVal === "all" ? scored.length : parseInt(countVal, 10);
     const topPosts = scored.slice(0, limit);
 
     updateExtractCount();
-    showExportModal(topPosts);
+    showExportModal(topPosts, scored.length);
   }
 
-  function showExportModal(posts) {
-    const existing = document.getElementById("ieh-export-modal");
+  function showExportModal(posts, totalScored) {
+    const existing = document.getElementById("leh-export-modal");
     if (existing) existing.remove();
 
     const overlay = document.createElement("div");
-    overlay.id = "ieh-export-modal";
-    overlay.className = "ieh-modal-overlay";
-
-    const totalPosts = findAllPosts().length;
+    overlay.id = "leh-export-modal";
+    overlay.className = "leh-modal-overlay";
 
     let tableRows = "";
     posts.forEach((p, i) => {
-      const user = p.username ? `@${p.username}` : "unknown";
+      const user = p.username || "unknown";
       const link = p.postUrl
-        ? `<a href="${p.postUrl}" target="_blank" rel="noopener noreferrer" class="ieh-modal-link">${p.postUrl.length > 40 ? p.postUrl.substring(0, 37) + "..." : p.postUrl}</a>`
+        ? '<a href="' +
+          p.postUrl +
+          '" target="_blank" rel="noopener noreferrer" class="leh-modal-link">' +
+          (p.postUrl.length > 50 ? p.postUrl.substring(0, 47) + "..." : p.postUrl) +
+          "</a>"
         : "N/A";
+      const dateStr = p.date
+        ? p.date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+        : "\u2014";
       const cap = p.caption
-        ? `<span class="ieh-modal-caption">${p.caption.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</span>`
+        ? '<span class="leh-modal-caption">' +
+          p.caption.replace(/</g, "&lt;").replace(/>/g, "&gt;") +
+          "</span>"
         : "";
-      tableRows += `
-        <tr>
-          <td class="ieh-modal-rank">${i + 1}</td>
-          <td class="ieh-modal-user">${user}</td>
-          <td class="ieh-modal-metrics">${formatCount(p.likes)}</td>
-          <td class="ieh-modal-metrics">${formatCount(p.comments)}</td>
-          <td class="ieh-modal-metrics">${formatCount(p.views)}</td>
-          <td class="ieh-modal-score">${p.score.toLocaleString()}</td>
-          <td class="ieh-modal-link-cell">${link}</td>
-        </tr>
-        ${cap ? `<tr class="ieh-caption-row"><td></td><td colspan="6">${cap}</td></tr>` : ""}
-      `;
+
+      tableRows +=
+        "<tr>" +
+        '<td class="leh-modal-rank">' + (i + 1) + "</td>" +
+        '<td class="leh-modal-user">' + user.replace(/</g, "&lt;") + "</td>" +
+        '<td class="leh-modal-metrics">' + formatCount(p.reactions) + "</td>" +
+        '<td class="leh-modal-metrics">' + formatCount(p.comments) + "</td>" +
+        '<td class="leh-modal-metrics">' + formatCount(p.reposts) + "</td>" +
+        '<td class="leh-modal-score">' + p.score.toLocaleString() + "</td>" +
+        '<td class="leh-modal-date">' + dateStr + "</td>" +
+        '<td class="leh-modal-link-cell">' + link + "</td>" +
+        "</tr>" +
+        (cap
+          ? '<tr class="leh-caption-row"><td></td><td colspan="7">' + cap + "</td></tr>"
+          : "");
     });
 
-    overlay.innerHTML = `
-      <div class="ieh-modal">
-        <div class="ieh-modal-header">
-          <span class="ieh-modal-title">Top ${posts.length} Posts (of ${totalPosts} detected)</span>
-          <button class="ieh-modal-close" title="Close">&times;</button>
-        </div>
-        <div class="ieh-modal-actions">
-          <button id="ieh-copy-text" class="ieh-btn ieh-btn-sm">Copy as Text</button>
-          <button id="ieh-copy-json" class="ieh-btn ieh-btn-sm">Copy JSON</button>
-          <button id="ieh-download-csv" class="ieh-btn ieh-btn-sm">Download CSV</button>
-        </div>
-        <div class="ieh-modal-body">
-          <table class="ieh-modal-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>User</th>
-                <th>Likes</th>
-                <th>Comments</th>
-                <th>Views</th>
-                <th>Score</th>
-                <th>Link</th>
-              </tr>
-            </thead>
-            <tbody>${tableRows}</tbody>
-          </table>
-          ${posts.length === 0 ? '<div class="ieh-modal-empty">No posts found. Try scrolling through the feed first to load posts, or hover over profile grid posts to reveal engagement data.</div>' : ""}
-        </div>
-      </div>
-    `;
+    overlay.innerHTML =
+      '<div class="leh-modal">' +
+      '<div class="leh-modal-header">' +
+      '<span class="leh-modal-title">Top ' +
+      posts.length +
+      " Posts (of " +
+      totalScored +
+      " scored)</span>" +
+      '<button class="leh-modal-close" title="Close">&times;</button>' +
+      "</div>" +
+      '<div class="leh-modal-actions">' +
+      '<button id="leh-copy-text" class="leh-btn leh-btn-sm">Copy as Text</button>' +
+      '<button id="leh-copy-json" class="leh-btn leh-btn-sm">Copy JSON</button>' +
+      '<button id="leh-download-csv" class="leh-btn leh-btn-sm">Download CSV</button>' +
+      "</div>" +
+      '<div class="leh-modal-body">' +
+      '<table class="leh-modal-table">' +
+      "<thead><tr>" +
+      "<th>#</th><th>Author</th><th>Reactions</th><th>Comments</th><th>Reposts</th><th>Score</th><th>Date</th><th>Link</th>" +
+      "</tr></thead>" +
+      "<tbody>" +
+      tableRows +
+      "</tbody></table>" +
+      (posts.length === 0
+        ? '<div class="leh-modal-empty">No posts found. Try scrolling through the feed first to load more posts.</div>'
+        : "") +
+      "</div>" +
+      "</div>";
 
     document.body.appendChild(overlay);
 
     // ── Close ──
-    overlay.querySelector(".ieh-modal-close").addEventListener("click", () => {
+    overlay.querySelector(".leh-modal-close").addEventListener("click", () => {
       overlay.remove();
     });
     overlay.addEventListener("click", (e) => {
@@ -1176,78 +1391,97 @@
     });
 
     // ── Copy as Text ──
-    document.getElementById("ieh-copy-text").addEventListener("click", () => {
+    document.getElementById("leh-copy-text").addEventListener("click", () => {
       const lines = posts.map((p, i) => {
-        const user = p.username ? `@${p.username}` : "unknown";
         const parts = [];
-        if (p.likes > 0) parts.push(`${formatCount(p.likes)} likes`);
-        if (p.comments > 0)
-          parts.push(`${formatCount(p.comments)} comments`);
-        if (p.views > 0) parts.push(`${formatCount(p.views)} views`);
-        let line = `${i + 1}. ${user} — Score: ${p.score.toLocaleString()} (${parts.join(", ")})`;
-        if (p.postUrl) line += `\n   ${p.postUrl}`;
-        if (p.caption) line += `\n   "${p.caption}"`;
+        if (p.reactions > 0) parts.push(formatCount(p.reactions) + " reactions");
+        if (p.comments > 0) parts.push(formatCount(p.comments) + " comments");
+        if (p.reposts > 0) parts.push(formatCount(p.reposts) + " reposts");
+        const dateStr = p.date
+          ? " [" + p.date.toLocaleDateString() + "]"
+          : "";
+        let line =
+          (i + 1) +
+          ". " +
+          (p.username || "unknown") +
+          " \u2014 Score: " +
+          p.score.toLocaleString() +
+          " (" +
+          parts.join(", ") +
+          ")" +
+          dateStr;
+        if (p.postUrl) line += "\n   " + p.postUrl;
+        if (p.caption) line += '\n   "' + p.caption + '"';
         return line;
       });
-      const text = `Instagram Top ${posts.length} Posts\n${"=".repeat(40)}\n\n${lines.join("\n\n")}`;
+      const text =
+        "LinkedIn Top " +
+        posts.length +
+        " Posts\n" +
+        "=".repeat(40) +
+        "\n\n" +
+        lines.join("\n\n");
       navigator.clipboard.writeText(text).then(() => {
-        flashButton("ieh-copy-text", "Copied!");
+        flashButton("leh-copy-text", "Copied!");
       });
     });
 
     // ── Copy JSON ──
-    document.getElementById("ieh-copy-json").addEventListener("click", () => {
+    document.getElementById("leh-copy-json").addEventListener("click", () => {
       const data = posts.map((p, i) => ({
         rank: i + 1,
-        username: p.username || null,
+        author: p.username || null,
         postUrl: p.postUrl || null,
         caption: p.caption || null,
-        likes: p.likes,
+        date: p.date ? p.date.toISOString() : null,
+        reactions: p.reactions,
         comments: p.comments,
-        views: p.views,
+        reposts: p.reposts,
         score: p.score,
       }));
       navigator.clipboard
         .writeText(JSON.stringify(data, null, 2))
         .then(() => {
-          flashButton("ieh-copy-json", "Copied!");
+          flashButton("leh-copy-json", "Copied!");
         });
     });
 
     // ── Download CSV ──
-    document
-      .getElementById("ieh-download-csv")
-      .addEventListener("click", () => {
-        const header =
-          "Rank,Username,Likes,Comments,Views,Score,Post URL,Caption";
-        const rows = posts.map((p, i) => {
-          const escapeCsv = (val) => {
-            const s = String(val ?? "");
-            return s.includes(",") || s.includes('"') || s.includes("\n")
-              ? '"' + s.replace(/"/g, '""') + '"'
-              : s;
-          };
-          return [
-            i + 1,
-            escapeCsv(p.username || ""),
-            p.likes,
-            p.comments,
-            p.views,
-            p.score,
-            escapeCsv(p.postUrl || ""),
-            escapeCsv(p.caption || ""),
-          ].join(",");
-        });
-        const csv = header + "\n" + rows.join("\n");
-        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `instagram-top-posts-${new Date().toISOString().slice(0, 10)}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
-        flashButton("ieh-download-csv", "Downloaded!");
+    document.getElementById("leh-download-csv").addEventListener("click", () => {
+      const csvHeader =
+        "Rank,Author,Reactions,Comments,Reposts,Score,Date,Post URL,Caption";
+      const rows = posts.map((p, i) => {
+        const escapeCsv = (val) => {
+          const s = String(val ?? "");
+          return s.includes(",") || s.includes('"') || s.includes("\n")
+            ? '"' + s.replace(/"/g, '""') + '"'
+            : s;
+        };
+        return [
+          i + 1,
+          escapeCsv(p.username || ""),
+          p.reactions,
+          p.comments,
+          p.reposts,
+          p.score,
+          p.date ? p.date.toISOString().slice(0, 10) : "",
+          escapeCsv(p.postUrl || ""),
+          escapeCsv(p.caption || ""),
+        ].join(",");
       });
+      const csv = csvHeader + "\n" + rows.join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download =
+        "linkedin-top-posts-" +
+        new Date().toISOString().slice(0, 10) +
+        ".csv";
+      a.click();
+      URL.revokeObjectURL(url);
+      flashButton("leh-download-csv", "Downloaded!");
+    });
   }
 
   function flashButton(id, text) {
@@ -1255,26 +1489,28 @@
     if (!btn) return;
     const original = btn.textContent;
     btn.textContent = text;
-    btn.classList.add("ieh-btn-flash");
+    btn.classList.add("leh-btn-flash");
     setTimeout(() => {
       btn.textContent = original;
-      btn.classList.remove("ieh-btn-flash");
+      btn.classList.remove("leh-btn-flash");
     }, 1500);
   }
 
-  // ─── Settings Persistence (local only) ───────────────────────────────
+  // ─── Settings Persistence ──────────────────────────────────────────
 
   function saveSettings() {
     try {
       chrome.storage.local.set({
-        iehSettings: {
+        lehSettingsV3: {
           enabled,
           showScores,
           mode,
           absoluteThreshold,
           weights,
-          autoScrollEnabled,
           autoScrollSpeed,
+          dateFilter,
+          customDateFrom,
+          customDateTo,
         },
       });
     } catch {
@@ -1284,62 +1520,67 @@
 
   function loadSettings() {
     try {
-      chrome.storage.local.get("iehSettings", (result) => {
-        if (result && result.iehSettings) {
-          const s = result.iehSettings;
-          enabled = s.enabled ?? true;
-          showScores = s.showScores ?? true;
-          mode = s.mode ?? "percentile";
-          absoluteThreshold = s.absoluteThreshold ?? 100;
-          weights = s.weights ?? { likes: 5, comments: 10, views: 2 };
-          autoScrollSpeed = s.autoScrollSpeed ?? 2;
+      chrome.storage.local.get("lehSettingsV3", (result) => {
+        if (!result || !result.lehSettingsV3) return;
+        const s = result.lehSettingsV3;
 
-          const enabledEl = document.getElementById("ieh-enabled");
-          const showScoresEl = document.getElementById("ieh-show-scores");
-          const modeEl = document.getElementById("ieh-mode");
-          const thresholdEl = document.getElementById("ieh-threshold");
-          const thresholdValEl = document.getElementById(
-            "ieh-threshold-val"
-          );
-          const wLikesEl = document.getElementById("ieh-w-likes");
-          const wCommentsEl = document.getElementById("ieh-w-comments");
-          const wViewsEl = document.getElementById("ieh-w-views");
-          const thresholdRow = document.querySelector(
-            ".ieh-threshold-row"
-          );
-          const scrollSpeedEl = document.getElementById(
-            "ieh-scroll-speed"
-          );
-          const scrollSpeedValEl = document.getElementById(
-            "ieh-scroll-speed-val"
-          );
+        enabled = s.enabled ?? true;
+        showScores = s.showScores ?? true;
+        mode = s.mode ?? "percentile";
+        absoluteThreshold = s.absoluteThreshold ?? 100;
+        weights = s.weights ?? { reactions: 5, comments: 10, reposts: 2 };
+        autoScrollSpeed = s.autoScrollSpeed ?? 3;
+        dateFilter = s.dateFilter ?? "all";
+        customDateFrom = s.customDateFrom ?? "";
+        customDateTo = s.customDateTo ?? "";
 
-          if (enabledEl) enabledEl.checked = enabled;
-          if (showScoresEl) showScoresEl.checked = showScores;
-          if (modeEl) modeEl.value = mode;
-          if (thresholdEl) thresholdEl.value = absoluteThreshold;
-          if (thresholdValEl)
-            thresholdValEl.textContent = absoluteThreshold;
-          if (wLikesEl) wLikesEl.value = weights.likes;
-          if (wCommentsEl) wCommentsEl.value = weights.comments;
-          if (wViewsEl) wViewsEl.value = weights.views;
-          if (thresholdRow) {
-            thresholdRow.style.display =
-              mode === "threshold" ? "flex" : "none";
-          }
-          if (scrollSpeedEl) scrollSpeedEl.value = autoScrollSpeed;
-          if (scrollSpeedValEl)
-            scrollSpeedValEl.textContent = autoScrollSpeed;
+        // Update UI
+        const el = (id) => document.getElementById(id);
 
-          processAllPosts();
+        const enabledEl = el("leh-enabled");
+        const showScoresEl = el("leh-show-scores");
+        const modeEl = el("leh-mode");
+        const thresholdEl = el("leh-threshold");
+        const thresholdValEl = el("leh-threshold-val");
+        const wReactionsEl = el("leh-w-reactions");
+        const wCommentsEl = el("leh-w-comments");
+        const wRepostsEl = el("leh-w-reposts");
+        const thresholdRow = document.querySelector(".leh-threshold-row");
+        const scrollSpeedEl = el("leh-scroll-speed");
+        const scrollSpeedValEl = el("leh-scroll-speed-val");
+        const dateFilterEl = el("leh-date-filter");
+        const dateFromEl = el("leh-date-from");
+        const dateToEl = el("leh-date-to");
+        const dateCustom = el("leh-date-custom");
+
+        if (enabledEl) enabledEl.checked = enabled;
+        if (showScoresEl) showScoresEl.checked = showScores;
+        if (modeEl) modeEl.value = mode;
+        if (thresholdEl) thresholdEl.value = absoluteThreshold;
+        if (thresholdValEl) thresholdValEl.textContent = absoluteThreshold;
+        if (wReactionsEl) wReactionsEl.value = weights.reactions;
+        if (wCommentsEl) wCommentsEl.value = weights.comments;
+        if (wRepostsEl) wRepostsEl.value = weights.reposts;
+        if (thresholdRow) {
+          thresholdRow.style.display = mode === "threshold" ? "flex" : "none";
         }
+        if (scrollSpeedEl) scrollSpeedEl.value = autoScrollSpeed;
+        if (scrollSpeedValEl) scrollSpeedValEl.textContent = autoScrollSpeed;
+        if (dateFilterEl) dateFilterEl.value = dateFilter;
+        if (dateFromEl) dateFromEl.value = customDateFrom;
+        if (dateToEl) dateToEl.value = customDateTo;
+        if (dateCustom) {
+          dateCustom.style.display = dateFilter === "custom" ? "block" : "none";
+        }
+
+        processAllPosts();
       });
     } catch {
       // storage unavailable
     }
   }
 
-  // ─── Initialization ──────────────────────────────────────────────────
+  // ─── Initialization ────────────────────────────────────────────────
 
   function init() {
     createControlPanel();
@@ -1347,10 +1588,12 @@
     setupObserver();
     setupNavigationListener();
 
-    // Initial scan (delayed to let IG finish rendering)
+    // Initial scans (delayed to let LinkedIn finish rendering)
     setTimeout(processAllPosts, 1000);
-    // Second scan catches lazy-loaded grid content
-    setTimeout(processAllPosts, 3000);
+    setTimeout(() => {
+      processAllPosts();
+      updateExtractCount();
+    }, 3000);
 
     let scrollTimer = null;
     window.addEventListener(
