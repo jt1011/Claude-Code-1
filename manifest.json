@@ -1,14 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "Instagram Engagement Highlighter",
-  "version": "1.0.0",
-  "description": "Visually highlights high-engagement Instagram posts based on visible engagement metrics. Fully client-side, no data collection.",
+  "name": "LinkedIn Engagement Highlighter V3",
+  "version": "3.0.0",
+  "description": "Highlights high-engagement LinkedIn posts with scoring, date filtering, and export. Works on feed, activity, company, and search pages. Fully client-side.",
   "permissions": ["storage"],
-  "host_permissions": ["https://www.instagram.com/*"],
+  "host_permissions": ["https://www.linkedin.com/*"],
   "content_scripts": [
     {
       "matches": [
-        "https://www.instagram.com/*"
+        "https://www.linkedin.com/*"
       ],
       "css": ["styles.css"],
       "js": ["content.js"],
