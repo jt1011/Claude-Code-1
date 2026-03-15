@@ -1,0 +1,1257 @@
+/**
+ * LinkedIn Engagement Highlighter V4.0 - Styles
+ * Sidebar-based UI with search, filters, and modern design.
+ */
+
+/* ─── CSS Variables ──────────────────────────────────────────────── */
+
+:root {
+  --leh-primary: #0a66c2;
+  --leh-primary-dark: #004182;
+  --leh-primary-light: rgba(10, 102, 194, 0.08);
+  --leh-green: #057642;
+  --leh-gold: #f59e0b;
+  --leh-purple: #7c3aed;
+  --leh-red: #ef4444;
+  --leh-bg: #ffffff;
+  --leh-bg-alt: #fafafa;
+  --leh-bg-input: #fff;
+  --leh-border: rgba(0, 0, 0, 0.08);
+  --leh-border-light: #eee;
+  --leh-text: #333;
+  --leh-text-secondary: #555;
+  --leh-text-muted: #888;
+  --leh-text-faint: #bbb;
+  --leh-sidebar-width: 340px;
+  --leh-tab-width: 36px;
+  --leh-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* ─── Sidebar Container ──────────────────────────────────────────── */
+
+#leh-sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: var(--leh-sidebar-width);
+  height: 100vh;
+  background: var(--leh-bg);
+  border-left: 1px solid var(--leh-border);
+  box-shadow: -2px 0 16px rgba(0, 0, 0, 0.06);
+  z-index: 9999;
+  font-family: var(--leh-font);
+  font-size: 13px;
+  color: var(--leh-text);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(0);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+#leh-sidebar.leh-closed {
+  transform: translateX(var(--leh-sidebar-width));
+}
+
+/* Push LinkedIn content when sidebar is open */
+body.leh-sidebar-open {
+  margin-right: var(--leh-sidebar-width) !important;
+  transition: margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ─── Sidebar Toggle Tab ─────────────────────────────────────────── */
+
+#leh-sidebar-tab {
+  position: fixed;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  width: var(--leh-tab-width);
+  height: 80px;
+  background: linear-gradient(180deg, var(--leh-primary), var(--leh-primary-dark));
+  color: #fff;
+  border-radius: 8px 0 0 8px;
+  cursor: pointer;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: none;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.15);
+  transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s;
+  font-family: var(--leh-font);
+}
+
+#leh-sidebar-tab:hover {
+  background: linear-gradient(180deg, var(--leh-primary-dark), #002d5e);
+}
+
+body.leh-sidebar-open #leh-sidebar-tab {
+  right: var(--leh-sidebar-width);
+}
+
+.leh-tab-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.leh-tab-label {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
+
+/* ─── Sidebar Header ─────────────────────────────────────────────── */
+
+.leh-sidebar-header {
+  padding: 12px 14px;
+  background: linear-gradient(135deg, var(--leh-primary), var(--leh-primary-dark));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.leh-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.leh-logo {
+  opacity: 0.9;
+  flex-shrink: 0;
+}
+
+.leh-sidebar-title {
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
+.leh-version-badge {
+  font-size: 9px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+
+.leh-header-close {
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: #fff;
+  font-size: 18px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.leh-header-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* ─── Session Stats Bar ──────────────────────────────────────────── */
+
+.leh-stats-bar {
+  display: flex;
+  gap: 4px;
+  padding: 8px 14px;
+  background: var(--leh-bg-alt);
+  border-bottom: 1px solid var(--leh-border-light);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.leh-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-width: 50px;
+}
+
+.leh-stat-value {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--leh-primary);
+  line-height: 1.2;
+}
+
+.leh-stat-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--leh-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ─── Search Box ─────────────────────────────────────────────────── */
+
+.leh-search-box {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--leh-border-light);
+  flex-shrink: 0;
+}
+
+.leh-search-input-wrap {
+  position: relative;
+}
+
+.leh-search-input {
+  width: 100%;
+  padding: 8px 12px 8px 32px;
+  font-size: 12px;
+  font-family: inherit;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: var(--leh-bg-input);
+  color: var(--leh-text);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.leh-search-input:focus {
+  outline: none;
+  border-color: var(--leh-primary);
+  box-shadow: 0 0 0 2px rgba(10, 102, 194, 0.15);
+}
+
+.leh-search-input::placeholder {
+  color: var(--leh-text-faint);
+}
+
+.leh-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--leh-text-muted);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.leh-search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--leh-text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  display: none;
+}
+
+.leh-search-clear:hover {
+  color: var(--leh-text);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.leh-search-count {
+  font-size: 10px;
+  color: var(--leh-text-muted);
+  margin-top: 4px;
+  text-align: center;
+}
+
+/* ─── Filter Chips ───────────────────────────────────────────────── */
+
+.leh-filter-bar {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--leh-border-light);
+  flex-shrink: 0;
+}
+
+.leh-filter-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--leh-text-muted);
+  margin-bottom: 6px;
+}
+
+.leh-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.leh-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  background: var(--leh-bg);
+  color: var(--leh-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.leh-chip:hover {
+  border-color: var(--leh-primary);
+  color: var(--leh-primary);
+}
+
+.leh-chip.leh-chip-active {
+  background: var(--leh-primary);
+  color: #fff;
+  border-color: var(--leh-primary);
+}
+
+.leh-chip-count {
+  font-size: 9px;
+  opacity: 0.75;
+}
+
+/* Media type chip colors */
+.leh-chip[data-media="image"].leh-chip-active { background: #3b82f6; border-color: #3b82f6; }
+.leh-chip[data-media="video"].leh-chip-active { background: #ef4444; border-color: #ef4444; }
+.leh-chip[data-media="document"].leh-chip-active { background: #f59e0b; border-color: #f59e0b; color: #333; }
+.leh-chip[data-media="carousel"].leh-chip-active { background: #8b5cf6; border-color: #8b5cf6; }
+.leh-chip[data-media="article"].leh-chip-active { background: #06b6d4; border-color: #06b6d4; }
+.leh-chip[data-media="text"].leh-chip-active { background: #6b7280; border-color: #6b7280; }
+
+/* ─── Sidebar Body (scrollable) ──────────────────────────────────── */
+
+.leh-sidebar-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.leh-sidebar-body::-webkit-scrollbar {
+  width: 5px;
+}
+
+.leh-sidebar-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.leh-sidebar-body::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 5px;
+}
+
+.leh-sidebar-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+/* ─── Post Cards in Sidebar ──────────────────────────────────────── */
+
+.leh-post-list {
+  padding: 6px;
+}
+
+.leh-post-card {
+  padding: 10px 12px;
+  margin-bottom: 4px;
+  background: var(--leh-bg);
+  border: 1px solid var(--leh-border-light);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.leh-post-card:hover {
+  border-color: var(--leh-primary);
+  box-shadow: 0 2px 8px rgba(10, 102, 194, 0.1);
+}
+
+.leh-post-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.leh-post-card-author {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--leh-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+.leh-post-card-date {
+  font-size: 10px;
+  color: var(--leh-text-muted);
+  white-space: nowrap;
+}
+
+.leh-post-card-hook {
+  font-size: 11px;
+  color: var(--leh-text-secondary);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.leh-post-card-metrics {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+}
+
+.leh-metric {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--leh-text-muted);
+}
+
+.leh-metric-value {
+  font-weight: 700;
+  color: var(--leh-text-secondary);
+}
+
+.leh-metric-trend-up {
+  color: #10b981;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.leh-metric-trend-down {
+  color: #ef4444;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.leh-post-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.leh-post-card-score {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--leh-primary);
+}
+
+.leh-post-card-media {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.03em;
+  color: #fff;
+}
+
+.leh-media-image { background: #3b82f6; }
+.leh-media-video { background: #ef4444; }
+.leh-media-document { background: #f59e0b; color: #333 !important; }
+.leh-media-carousel { background: #8b5cf6; }
+.leh-media-article { background: #06b6d4; }
+.leh-media-text { background: #6b7280; }
+
+.leh-post-card-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.leh-card-btn {
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  cursor: pointer;
+  color: var(--leh-text-muted);
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.leh-card-btn:hover {
+  border-color: var(--leh-primary);
+  color: var(--leh-primary);
+}
+
+.leh-card-btn.leh-bookmarked {
+  background: var(--leh-gold);
+  border-color: var(--leh-gold);
+  color: #fff;
+}
+
+/* Search highlighting */
+.leh-search-match {
+  background: rgba(245, 158, 11, 0.3);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+/* ─── Sections (Settings, Auto-scroll, Export) ───────────────────── */
+
+.leh-section {
+  margin: 6px;
+  background: var(--leh-bg-alt);
+  border: 1px solid var(--leh-border-light);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.leh-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--leh-text-muted);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.leh-section-header:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.leh-chevron {
+  font-size: 12px;
+  color: #999;
+  transition: transform 0.2s;
+}
+
+.leh-section-body {
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--leh-border-light);
+}
+
+/* ─── Control Row ────────────────────────────────────────────────── */
+
+.leh-control-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.leh-label-text {
+  font-size: 12px;
+  color: var(--leh-text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ─── Toggle Switch ──────────────────────────────────────────────── */
+
+.leh-toggle {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.leh-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.leh-toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: #ccc;
+  border-radius: 20px;
+  transition: background 0.25s ease;
+}
+
+.leh-toggle-slider::before {
+  content: "";
+  position: absolute;
+  height: 16px;
+  width: 16px;
+  left: 2px;
+  bottom: 2px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.25s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.leh-toggle input:checked + .leh-toggle-slider {
+  background: var(--leh-primary);
+}
+
+.leh-toggle input:checked + .leh-toggle-slider::before {
+  transform: translateX(16px);
+}
+
+/* ─── Select Dropdown ────────────────────────────────────────────── */
+
+.leh-select {
+  padding: 5px 22px 5px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: var(--leh-bg-input);
+  color: var(--leh-text);
+  cursor: pointer;
+  transition: border-color 0.2s;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23666' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+}
+
+.leh-select:hover { border-color: var(--leh-primary); }
+.leh-select:focus { outline: none; border-color: var(--leh-primary); box-shadow: 0 0 0 2px rgba(10, 102, 194, 0.15); }
+.leh-select-full { width: 100%; margin-bottom: 6px; }
+
+/* ─── Number Input ───────────────────────────────────────────────── */
+
+.leh-num-input {
+  width: 52px;
+  padding: 5px 6px;
+  font-size: 12px;
+  font-family: inherit;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  text-align: center;
+  background: var(--leh-bg-input);
+  color: var(--leh-text);
+  transition: border-color 0.2s;
+}
+
+.leh-num-input:hover { border-color: var(--leh-primary); }
+.leh-num-input:focus { outline: none; border-color: var(--leh-primary); box-shadow: 0 0 0 2px rgba(10, 102, 194, 0.15); }
+
+/* ─── Range Slider ───────────────────────────────────────────────── */
+
+.leh-range {
+  flex: 1;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: #ddd;
+  border-radius: 4px;
+  outline: none;
+}
+
+.leh-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--leh-primary);
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.leh-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--leh-primary);
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.leh-range-val {
+  min-width: 22px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--leh-primary);
+  flex-shrink: 0;
+}
+
+/* ─── Buttons ────────────────────────────────────────────────────── */
+
+.leh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.leh-btn-primary {
+  width: 100%;
+  margin-top: 6px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--leh-primary), var(--leh-primary-dark));
+  box-shadow: 0 2px 6px rgba(10, 102, 194, 0.25);
+}
+
+.leh-btn-primary:hover {
+  background: linear-gradient(135deg, var(--leh-primary-dark), #002d5e);
+  box-shadow: 0 3px 10px rgba(10, 102, 194, 0.35);
+  transform: translateY(-1px);
+}
+
+.leh-btn-primary:active { transform: translateY(0); }
+
+.leh-btn-secondary {
+  width: 100%;
+  margin-top: 6px;
+  color: var(--leh-primary);
+  background: var(--leh-primary-light);
+  border: 1px solid rgba(10, 102, 194, 0.2);
+}
+
+.leh-btn-secondary:hover { background: rgba(10, 102, 194, 0.14); }
+
+.leh-btn-caption {
+  width: 100%;
+  margin-top: 4px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--leh-purple), #5b21b6);
+  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.25);
+}
+
+.leh-btn-caption:hover {
+  background: linear-gradient(135deg, #5b21b6, #4c1d95);
+  transform: translateY(-1px);
+}
+
+.leh-btn-caption:active { transform: translateY(0); }
+.leh-btn-caption:disabled { opacity: 0.7; cursor: wait; transform: none !important; }
+
+.leh-btn-sm {
+  padding: 6px 12px;
+  font-size: 11px;
+  border-radius: 6px;
+  color: #fff;
+  background: var(--leh-primary);
+}
+
+.leh-btn-sm:hover { background: var(--leh-primary-dark); }
+
+.leh-btn-flash {
+  background: var(--leh-green) !important;
+  border-color: var(--leh-green) !important;
+  color: #fff !important;
+}
+
+.leh-btn-caption-sm {
+  background: linear-gradient(135deg, var(--leh-purple), #5b21b6) !important;
+}
+
+.leh-btn-caption-sm:hover {
+  background: linear-gradient(135deg, #5b21b6, #4c1d95) !important;
+}
+
+/* ─── Auto-scroll Direction Buttons ──────────────────────────────── */
+
+.leh-scroll-dir-btns {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.leh-scroll-dir-btn {
+  flex: 1;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: var(--leh-bg);
+  color: var(--leh-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+
+.leh-scroll-dir-btn:hover {
+  border-color: var(--leh-primary);
+  color: var(--leh-primary);
+}
+
+.leh-scroll-dir-btn.leh-dir-active {
+  background: var(--leh-primary);
+  color: #fff;
+  border-color: var(--leh-primary);
+}
+
+/* ─── Help Text ──────────────────────────────────────────────────── */
+
+.leh-help-text {
+  font-size: 10px;
+  color: #999;
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+/* ─── Date Filter ────────────────────────────────────────────────── */
+
+.leh-date-custom { margin-top: 6px; }
+
+.leh-date-input {
+  width: 100%;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: var(--leh-bg-input);
+  color: var(--leh-text);
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.leh-date-input:focus {
+  outline: none;
+  border-color: var(--leh-primary);
+  box-shadow: 0 0 0 2px rgba(10, 102, 194, 0.15);
+}
+
+.leh-filter-count {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--leh-primary);
+  background: var(--leh-primary-light);
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-top: 6px;
+  text-align: center;
+}
+
+/* ─── Page Indicator ─────────────────────────────────────────────── */
+
+.leh-page-indicator {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--leh-primary);
+  background: var(--leh-primary-light);
+  padding: 4px 10px;
+  border-radius: 6px;
+  text-align: center;
+  margin: 6px 6px 0;
+}
+
+/* ─── Empty State ────────────────────────────────────────────────── */
+
+.leh-empty-state {
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--leh-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.leh-empty-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+  opacity: 0.5;
+}
+
+/* ─── Tier Highlights (on LinkedIn posts) ────────────────────────── */
+
+.leh-tier1 {
+  border: 3px solid var(--leh-primary) !important;
+  box-shadow: 0 0 16px rgba(10, 102, 194, 0.35) !important;
+  border-radius: 8px !important;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.leh-tier2 {
+  border: 2px solid var(--leh-green) !important;
+  border-radius: 8px !important;
+  transition: border-color 0.3s ease;
+}
+
+/* ─── Score Badge (on LinkedIn posts) ────────────────────────────── */
+
+.leh-score-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  font-family: var(--leh-font);
+  padding: 6px 10px;
+  border-radius: 10px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  min-width: 70px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  pointer-events: auto;
+  cursor: default;
+}
+
+.leh-badge-metrics {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.leh-badge-metric {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.leh-badge-score-line {
+  font-size: 9px;
+  font-weight: 600;
+  opacity: 0.65;
+  white-space: nowrap;
+}
+
+.leh-badge-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.leh-badge-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-family: inherit;
+  pointer-events: auto;
+}
+
+.leh-badge-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.leh-badge-btn.leh-bookmarked {
+  background: rgba(245, 158, 11, 0.8);
+}
+
+/* Badge color tiers */
+.leh-color-gold {
+  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.5);
+}
+
+.leh-color-green {
+  background: linear-gradient(135deg, #10b981, #059669) !important;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+}
+
+.leh-color-blue {
+  background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35);
+}
+
+.leh-color-gray {
+  background: rgba(60, 60, 60, 0.8) !important;
+  color: #bbb;
+}
+
+/* ─── Export Modal ───────────────────────────────────────────────── */
+
+.leh-modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.leh-modal {
+  background: var(--leh-bg);
+  border-radius: 14px;
+  width: 94%;
+  max-width: 960px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.08);
+  font-family: var(--leh-font);
+  overflow: hidden;
+}
+
+.leh-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, var(--leh-primary), var(--leh-primary-dark));
+  color: #fff;
+}
+
+.leh-modal-title { font-weight: 700; font-size: 15px; }
+
+.leh-modal-close {
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: #fff;
+  font-size: 20px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.leh-modal-close:hover { background: rgba(255, 255, 255, 0.3); }
+
+.leh-modal-actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--leh-border-light);
+  background: var(--leh-bg-alt);
+  flex-wrap: wrap;
+}
+
+.leh-modal-body {
+  overflow-y: auto;
+  padding: 0;
+}
+
+.leh-modal-body::-webkit-scrollbar { width: 6px; }
+.leh-modal-body::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.12); border-radius: 6px; }
+
+/* ─── Modal Table ────────────────────────────────────────────────── */
+
+.leh-modal-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.leh-modal-table thead {
+  position: sticky;
+  top: 0;
+  background: #f5f5f5;
+  z-index: 1;
+}
+
+.leh-modal-table th {
+  padding: 10px;
+  text-align: left;
+  font-weight: 700;
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--leh-text-muted);
+  letter-spacing: 0.05em;
+  border-bottom: 2px solid #e5e5e5;
+  white-space: nowrap;
+}
+
+.leh-modal-table td {
+  padding: 10px;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: top;
+}
+
+.leh-modal-table tbody tr:hover { background: rgba(10, 102, 194, 0.04); }
+
+.leh-modal-rank { font-weight: 700; color: var(--leh-primary); width: 30px; text-align: center; }
+.leh-modal-user { font-weight: 600; color: var(--leh-text); white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+.leh-modal-metrics { text-align: right; color: var(--leh-text-secondary); white-space: nowrap; }
+.leh-modal-score { font-weight: 700; color: var(--leh-primary); text-align: right; white-space: nowrap; }
+.leh-modal-date { color: var(--leh-text-muted); font-size: 11px; white-space: nowrap; }
+.leh-modal-media { text-align: center; vertical-align: middle; }
+.leh-modal-link-cell { text-align: center; }
+.leh-modal-link { color: var(--leh-primary); text-decoration: none; font-size: 11px; font-weight: 600; }
+.leh-modal-link:hover { text-decoration: underline; }
+
+.leh-hook-row td { padding: 0 10px 10px 10px; border-bottom: 1px solid var(--leh-border-light); }
+.leh-hook-row:hover { background: rgba(10, 102, 194, 0.02) !important; }
+
+.leh-modal-hook {
+  font-size: 11px;
+  color: var(--leh-text-secondary);
+  line-height: 1.5;
+  display: block;
+  max-width: 750px;
+  word-break: break-word;
+  font-style: italic;
+  padding-left: 8px;
+  border-left: 3px solid var(--leh-primary);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.leh-hook-empty { color: var(--leh-text-faint); font-style: italic; }
+
+.leh-modal-empty {
+  padding: 48px 24px;
+  text-align: center;
+  color: #999;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ─── Keyboard Shortcut Tooltip ──────────────────────────────────── */
+
+.leh-shortcuts-tip {
+  position: absolute;
+  bottom: 60px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.9);
+  color: #fff;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 1.8;
+  z-index: 10002;
+  min-width: 220px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  display: none;
+}
+
+.leh-shortcuts-tip kbd {
+  background: rgba(255, 255, 255, 0.15);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 10px;
+}
+
+/* ─── Scanning Indicator ─────────────────────────────────────────── */
+
+.leh-scanning {
+  position: relative;
+}
+
+.leh-scanning::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--leh-primary), transparent);
+  animation: leh-scan 1.5s ease-in-out infinite;
+}
+
+@keyframes leh-scan {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* ─── Dark Mode ──────────────────────────────────────────────────── */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --leh-bg: #1b1f23;
+    --leh-bg-alt: #22272b;
+    --leh-bg-input: #2d2d2d;
+    --leh-border: rgba(255, 255, 255, 0.08);
+    --leh-border-light: #333;
+    --leh-text: #e0e0e0;
+    --leh-text-secondary: #aaa;
+    --leh-text-muted: #888;
+    --leh-text-faint: #555;
+  }
+
+  .leh-toggle-slider { background: #555; }
+  .leh-range { background: #444; }
+  .leh-score-badge { background: rgba(20, 20, 20, 0.9); }
+
+  .leh-chip {
+    background: #2d2d2d;
+    border-color: #444;
+    color: #aaa;
+  }
+
+  .leh-chip:hover { border-color: var(--leh-primary); color: #ccc; }
+
+  .leh-select, .leh-num-input, .leh-date-input {
+    background: #2d2d2d;
+    border-color: #444;
+    color: #e0e0e0;
+  }
+
+  .leh-btn-secondary {
+    background: rgba(10, 102, 194, 0.15);
+    border-color: rgba(10, 102, 194, 0.3);
+    color: #5caee8;
+  }
+
+  .leh-modal { background: #1b1f23; color: #e0e0e0; }
+  .leh-modal-actions { background: #22272b; border-bottom-color: #333; }
+  .leh-modal-table thead { background: #22272b; }
+  .leh-modal-table th { color: #888; border-bottom-color: #333; }
+  .leh-modal-table td { border-bottom-color: #2a2a2a; }
+  .leh-modal-table tbody tr:hover { background: rgba(10, 102, 194, 0.08); }
+  .leh-modal-user { color: #e0e0e0; }
+  .leh-modal-hook { color: #999; border-left-color: #3b82f6; }
+  .leh-hook-empty { color: #555; }
+  .leh-hook-row td { border-bottom-color: #333; }
+
+  .leh-post-card { background: #22272b; border-color: #333; }
+  .leh-post-card:hover { border-color: var(--leh-primary); }
+  .leh-card-btn { border-color: #444; color: #888; }
+  .leh-card-btn:hover { border-color: var(--leh-primary); color: var(--leh-primary); }
+}
+
+/* LinkedIn class-based dark mode */
+.theme--dark #leh-sidebar,
+[data-dark-mode="true"] #leh-sidebar,
+.dark-mode #leh-sidebar {
+  --leh-bg: #1b1f23;
+  --leh-bg-alt: #22272b;
+  --leh-bg-input: #2d2d2d;
+  --leh-border: rgba(255, 255, 255, 0.08);
+  --leh-border-light: #333;
+  --leh-text: #e0e0e0;
+  --leh-text-secondary: #aaa;
+  --leh-text-muted: #888;
+  --leh-text-faint: #555;
+}
